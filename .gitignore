@@ -7,5 +7,6 @@
 # Build output and any rendered resume, whatever it's named.
 # ./build.sh regenerates these; Resume_Template.docx is a tracked design source.
 *.docx
+*.pdf
 !Resume_Template.docx
 _refbuild/
