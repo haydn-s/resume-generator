@@ -9,6 +9,7 @@ page setup.
 
 Edit the constants below to change the look of every resume you generate.
 """
+import configparser
 import os
 import re
 import shutil
@@ -19,16 +20,66 @@ from pathlib import Path
 
 HERE = Path(__file__).parent
 WORK = HERE / "_refbuild"
-OUT = HERE / (sys.argv[1] if len(sys.argv) > 1 else "reference.docx")
+CONFIG = HERE / "presets.ini"
+
+USAGE = "usage: make_reference.py [--preset NAME] [output.docx]"
+
+
+def parse_args(argv):
+    """--preset NAME (or --preset=NAME), plus an optional output filename."""
+    preset, out = "DEFAULT", None
+    i = 0
+    while i < len(argv):
+        a = argv[i]
+        if a == "--preset":
+            i += 1
+            if i >= len(argv):
+                sys.exit(f"--preset needs a name\n{USAGE}")
+            preset = argv[i]
+        elif a.startswith("--preset="):
+            preset = a.split("=", 1)[1]
+        elif a.startswith("-"):
+            sys.exit(f"unknown option: {a}\n{USAGE}")
+        else:
+            out = a
+        i += 1
+    return preset, out
+
+
+def load_preset(name):
+    """One section of presets.ini, with [DEFAULT] inherited underneath."""
+    cp = configparser.ConfigParser(inline_comment_prefixes=("#", ";"))
+    if not cp.read(CONFIG):
+        sys.exit(f"cannot read {CONFIG}")
+    if name != "DEFAULT" and not cp.has_section(name):
+        known = ", ".join(["DEFAULT"] + cp.sections())
+        sys.exit(f"no preset {name!r} in {CONFIG.name}. Available: {known}")
+    return cp["DEFAULT"] if name == "DEFAULT" else cp[name]
+
+
+PRESET, _out = parse_args(sys.argv[1:])
+CFG = load_preset(PRESET)
+if _out is None:
+    _out = "reference.docx" if PRESET == "DEFAULT" else f"reference-{PRESET}.docx"
+OUT = HERE / _out
+
+
+def knob(key, cast=str):
+    """Preset value for `key`, overridden by the same name in caps if set."""
+    return cast(os.environ.get(key.upper(), CFG[key]))
 
 # ---------------------------------------------------------------- design knobs
 
-BODY_FONT = "Calibri"
-DISPLAY_FONT = "Arial"          # name, tagline, contact line, section headings
-BODY_SIZE = 21                  # half-points -> 10.5pt
-PAGE_W, PAGE_H = 12240, 15840   # US Letter, in DXA (1440 = 1 inch)
-MARGIN = 720                    # 0.5 inch
-RIGHT_TAB = PAGE_W - 2 * MARGIN  # 10800 -> where @@ sends the date
+# Every value here comes from presets.ini -- see that file for what each one
+# means and how to add a preset of your own.
+
+BODY_FONT = knob("body_font")
+DISPLAY_FONT = knob("display_font")   # name, tagline, contact, headings
+BODY_SIZE = knob("body_size", int)
+PAGE_W = knob("page_width", int)
+PAGE_H = knob("page_height", int)
+MARGIN = knob("margin", int)
+RIGHT_TAB = PAGE_W - 2 * MARGIN  # where @@ sends the date
 
 # Vertical rhythm. SPACING scales every paragraph before/after value; LINE is
 # line height in 240ths (252 = 1.05 lines). Raise both to loosen a page that
@@ -37,8 +88,14 @@ RIGHT_TAB = PAGE_W - 2 * MARGIN  # 10800 -> where @@ sends the date
 #
 #   SPACING=1.75 LINE=276 python3 make_reference.py reference-roomy.docx
 #
-SPACING = float(os.environ.get("SPACING", 1.0))
-LINE = int(os.environ.get("LINE", 252))
+SPACING = knob("spacing", float)
+LINE = knob("line", int)
+
+# How far bullet text stops short of the right margin, in DXA. A full-width
+# 7.5" measure runs bullets right up against the date column and reads
+# crowded; pulling them in gives the dates a clear gutter. 0 restores
+# full-width bullets.
+BULLET_RIGHT = knob("bullet_right", int)
 
 
 def sp(v):
@@ -67,6 +124,11 @@ def style(sid, name, ppr, rpr, based="Normal", nxt="Normal"):
 # the Lua filter injects for @@ always lands in the same place.
 TABS = f'<w:tabs><w:tab w:val="right" w:pos="{RIGHT_TAB}"/></w:tabs>'
 
+# Bullets carry their own right tab stop, moved in by BULLET_RIGHT. Without
+# this a dated bullet would tab to a stop outside its own text area.
+BULLET_TABS = (f'<w:tabs><w:tab w:val="right" '
+               f'w:pos="{RIGHT_TAB - BULLET_RIGHT}"/></w:tabs>')
+
 STYLES = {
     # id: (name, pPr, rPr)
     "Normal": (
@@ -93,8 +155,8 @@ STYLES = {
     # then ind.
     "Compact": (
         "Compact",
-        f'{TABS}<w:spacing w:before="0" w:after="{sp(20)}"/>'
-        f'<w:ind w:left="288" w:hanging="180"/>',
+        f'{BULLET_TABS}<w:spacing w:before="0" w:after="{sp(20)}"/>'
+        f'<w:ind w:left="288" w:right="{BULLET_RIGHT}" w:hanging="180"/>',
         "",
     ),
     # Section headings: bold caps on a full-width rule, kept with what follows.
@@ -243,7 +305,7 @@ def main():
                 z.write(f, f.relative_to(unpacked))
 
     shutil.rmtree(WORK)
-    print(f"wrote {OUT}")
+    print(f"wrote {OUT} [preset: {PRESET}]")
 
 
 if __name__ == "__main__":

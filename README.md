@@ -24,7 +24,8 @@ hold placeholders, so they're tracked and a fresh clone always has one to copy.
 | `resume.template.md` | The starting point. Copy it to `resume.md`. Tracked. |
 | `resume.md` | **Your content.** The only file you normally edit. Gitignored. |
 | `reference.docx` | The design. Pandoc reads its styles and throws away its text. |
-| `make_reference.py` | Regenerates `reference.docx`. Edit this to change the look. |
+| `presets.ini` | **The design values.** Fonts, sizes, spacing. Pick one with `--preset`. |
+| `make_reference.py` | Turns a preset into `reference.docx`. Holds the style structure. |
 | `rightalign.lua` | Turns the `@@` marker into a right-aligned tab. |
 | `build.sh` | Runs Pandoc with the right flags. |
 
@@ -85,18 +86,11 @@ in any of them.
 
 ## Changing the design
 
-Everything visual lives in `make_reference.py`. The knobs at the top cover
-fonts, body size, page size, and margins:
-
-```python
-BODY_FONT = "Calibri"
-DISPLAY_FONT = "Arial"
-BODY_SIZE = 21          # half-points, so 21 = 10.5pt
-MARGIN = 720            # DXA, 1440 = 1 inch
-```
-
-Below that, `STYLES` maps each style to its paragraph and run properties in raw
-OOXML. Change one, run `./build.sh`, and every resume you generate from then on
+The design splits in two. Numbers — fonts, sizes, page geometry, spacing —
+live in `presets.ini`, so you can keep several looks side by side and choose
+between them at build time. Structure lives in `make_reference.py`, where
+`STYLES` maps each style to its paragraph and run properties in raw OOXML.
+Change either, run `./build.sh`, and every resume you generate from then on
 picks it up.
 
 Two things are load-bearing and worth knowing before you edit:
@@ -108,71 +102,89 @@ Two things are load-bearing and worth knowing before you edit:
   `make_reference.py` does nothing unless something in `resume.md` references
   it, via a `#` heading level or a `custom-style` div.
 
-### Spacing and line height
+### Presets
 
-Vertical rhythm has its own two knobs, just above `STYLES`:
+Numeric design values live in `presets.ini` rather than in code. `[DEFAULT]` is
+the base design; every other section inherits from it and overrides only what it
+changes, so a preset is usually two or three lines:
 
-```python
-SPACING = float(os.environ.get("SPACING", 1.0))   # multiplier on every before/after gap
-LINE    = int(os.environ.get("LINE", 252))        # line height, in 240ths of a line
+```ini
+[DEFAULT]
+body_font    = Calibri
+display_font = Arial
+body_size    = 21       # half-points, so 21 = 10.5pt
+page_width   = 12240    # US Letter
+page_height  = 15840
+margin       = 720      # 0.5in
+spacing      = 1.0      # multiplier on every paragraph before/after gap
+line         = 252      # line height in 240ths; 240 = single, 252 = 1.05
+bullet_right = 1440     # how far bullet text stops short of the right margin
+
+[roomy]
+spacing = 1.75
+line    = 276
 ```
 
-`SPACING` is a plain multiplier — `1.0` is the current design, `1.5` is half
-again as much air. `LINE` is absolute rather than scaled: `240` is
-single-spaced, `252` is 1.05x, `276` is 1.15x.
+Pick one at build time:
 
-Spacing values are in DXA, twentieths of a point, so 20 DXA = 1pt:
+```bash
+./build.sh --preset roomy resume.md Resume_Roomy.docx
+./build.sh                                   # [DEFAULT]
+```
 
-| Value in `STYLES` | Controls | Default |
+Three ship with the repo: `roomy` (looser, runs longer), `compact` (tighter),
+and `onepage` (smaller type and narrower margins as well). Add your own by
+copying a section and renaming it — any `[DEFAULT]` key can be overridden.
+
+Each preset caches its own `reference-<preset>.docx`, so switching back and
+forth doesn't rebuild every time. A carrier is regenerated when it is older than
+either `make_reference.py` or `presets.ini`, so editing a preset takes effect on
+the next build.
+
+#### What the values mean
+
+Spacing is in DXA — twentieths of a point — so 20 DXA = 1pt, and 1440 = 1 inch.
+`spacing` is a plain multiplier on every before/after gap; `line` is absolute,
+in 240ths of a line.
+
+| Key | Controls | Default |
 |---|---|---|
-| `sp(220)` | Space above a section heading | 11pt |
-| `sp(80)` | Space below the heading's rule | 4pt |
-| `sp(120)` | Gap between entries within a section | 6pt |
-| `sp(20)` | Gap between bullets | 1pt |
-| `sp(40)` | Space under the name and tagline | 2pt |
-| `LINE` | Line height inside a paragraph | 1.05x |
+| `spacing` | Multiplier on every paragraph gap | 1.0 |
+| `line` | Line height inside a paragraph | 252 = 1.05x |
+| `bullet_right` | How far bullets stop short of the right margin | 1440 = 1in |
+| `body_size` | Body type size, in half-points | 21 = 10.5pt |
+| `margin` | Page margin, all four sides | 720 = 0.5in |
 
-`sp(0)` is still `0`, so `SPACING` only widens gaps that already exist.
+Scaling zero gives zero, so `spacing` only widens gaps that already exist.
 `FirstParagraph` and `Contact` never move however high you push it — by design,
-since the paragraph under a heading takes its air from the heading's own
-`after`.
+since a paragraph under a heading takes its air from the heading's own `after`.
 
-**To try a value without editing anything.** Both knobs read the environment,
-and the output filename is the first argument:
+Structure stays in code. `STYLES` decides which styles are bold and which carry
+a rule; a preset cannot reach it. Presets change proportions, not anatomy.
 
-```bash
-SPACING=1.75 LINE=276 python3 make_reference.py reference-roomy.docx
-pandoc resume.md --reference-doc=reference-roomy.docx \
-  --lua-filter=rightalign.lua -o roomy.docx
-```
+#### One-off overrides
 
-**To make it permanent.** Change the two defaults in place, then rebuild.
-
-**To tune one gap rather than all of them.** Leave `SPACING` at `1.0` and edit
-the single number. Loosening only the gap between entries, 6pt to 9pt:
-
-```python
-"BodyText": (
-    "Body Text",
-    f'{TABS}<w:spacing w:before="{sp(180)}" w:after="0"/>',
-    "",
-),
-```
-
-One trap worth knowing: `SPACING=1.75 ./build.sh` looks right and quietly does
-nothing. `build.sh` regenerates `reference.docx` only when it is missing or
-older than `make_reference.py`, so with a current reference file the variable is
-never read — no error, just the old spacing. Delete the reference first:
+Any key can be overridden for a single run by an environment variable of the
+same name in caps. Precedence is environment variable, then preset, then
+`[DEFAULT]`:
 
 ```bash
-rm reference.docx && SPACING=1.75 ./build.sh
+SPACING=2.0 ./build.sh --preset roomy
+BULLET_RIGHT=1800 python3 make_reference.py reference-test.docx
 ```
 
-Editing `make_reference.py` itself is fine, since that updates its timestamp.
-That comparison is whole-second on macOS's bash 3.2 though, so an edit and a
-build inside the same second can miss each other — another reason
-`rm reference.docx` is the reliable move.
+One trap: `build.sh` regenerates the style carrier only when it is missing or
+older than `make_reference.py` or `presets.ini`. It knows nothing about
+environment variables, so with a current carrier `SPACING=2.0 ./build.sh` is
+silently a no-op — no error, just the old spacing. Delete the carrier first:
 
+```bash
+rm reference.docx && SPACING=2.0 ./build.sh
+```
+
+That timestamp comparison is whole-second on macOS's bash 3.2, so an edit and a
+build inside the same second can miss each other — another reason `rm` is the
+reliable move.
 
 ## Other output formats
 
