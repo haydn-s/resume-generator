@@ -1,0 +1,11 @@
+# Personal content. Private to each individual — never committed.
+# Templates are the exception: they hold placeholders, not real content.
+*resume*.md
+*Resume*.md
+!*.template.md
+
+# Build output. ./build.sh regenerates these.
+reference.docx
+resume.docx
+resume-*.docx
+_refbuild/
