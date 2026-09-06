@@ -251,3 +251,39 @@ pandoc --version
 Distribution packages lag behind, so `apt` and `dnf` on an older release can
 land you below 2.17. If they do, uninstall and use the `.deb` or `.rpm` from
 the releases page instead.
+
+## Tests
+
+```bash
+tests/run.sh                 # everything
+tests/run.sh privacy lint    # only the named groups
+```
+
+Groups are `privacy`, `build`, `lint` and `docs`. Builds run inside a throwaway
+copy of the working tree, so the suite never touches your own `resume.md` or
+`reference.docx`. A check whose tool is missing is skipped rather than failed,
+so a local run without `shellcheck` still works.
+
+| Group | What it checks |
+|---|---|
+| `privacy` | No personal content is tracked; `.gitignore` covers the filenames that matter and doesn't over-match project files. |
+| `build` | The fresh-clone flow works, a missing `resume.md` errors helpfully, every preset builds, an unknown preset exits nonzero, all eight paragraph styles reach the DOCX, every `@@` becomes a tab, and a preset visibly changes the output. |
+| `lint` | No dangling `\` before a blank line, no bullet carrying an `@@` date, shell and Python parse, plus shellcheck and ruff when installed. |
+| `docs` | README fences balance and it parses; every preset the README names exists in `presets.ini`. |
+
+Two of those encode decisions rather than mechanics, and are worth knowing
+before you "fix" them:
+
+- **Bullets must not carry `@@` dates.** A bullet's right indent moves its tab
+  stop inward, so a date on a bullet stops short of every other date on the
+  page. Keeping dates off bullets is what makes `bullet_right` safe to tune.
+- **The `\(555)` escape in the fixture is load-bearing.** Pandoc reads a
+  leading `(555)` as ordered-list syntax, swallows the line into a list, and
+  silently drops the paragraph style. Exit code 0, no warning.
+
+CI runs the same script on every push and pull request, in
+`.github/workflows/ci.yml`. It builds against Pandoc 2.17, 3.1.3 and latest on
+Linux, and 3.1.3 and latest on macOS — 2.17 ships no macOS build. It also runs
+the build group under Python 3.9 and 3.13; the 3.9 leg exists because stock
+macOS ships it, and it is the reason presets are INI rather than TOML.
+

@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# Nothing here needs write access to the repository.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Privacy and lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install linters
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends shellcheck
+          pipx install ruff
+      - name: Run privacy and lint checks
+        run: tests/run.sh privacy lint
+
+  build:
+    name: ${{ matrix.os }} / pandoc ${{ matrix.pandoc }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # The floor the README claims. Pandoc ships no macOS build for it.
+          - { os: ubuntu-latest, pandoc: '2.17' }
+          # The version the README says it was built and tested against.
+          - { os: ubuntu-latest, pandoc: '3.1.3' }
+          - { os: macos-latest, pandoc: '3.1.3' }
+          # Drift detection: make_reference.py rewrites Pandoc's own default
+          # reference.docx, so a change to that skeleton breaks the design
+          # silently. Testing latest turns that into a red build.
+          - { os: ubuntu-latest, pandoc: 'latest' }
+          - { os: macos-latest, pandoc: 'latest' }
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install pandoc ${{ matrix.pandoc }}
+        run: tests/install-pandoc.sh '${{ matrix.pandoc }}'
+      - name: Run build and docs checks
+        run: tests/run.sh build docs
+
+  python:
+    name: Python ${{ matrix.python }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.9 is what stock macOS ships and the reason presets are INI rather
+        # than TOML. If this job goes red, that decision has been undone.
+        python: ['3.9', '3.13']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Install pandoc
+        run: tests/install-pandoc.sh latest
+      - name: Run build checks
+        run: tests/run.sh build
