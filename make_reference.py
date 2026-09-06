@@ -9,15 +9,17 @@ page setup.
 
 Edit the constants below to change the look of every resume you generate.
 """
+import os
 import re
 import shutil
 import subprocess
+import sys
 import zipfile
 from pathlib import Path
 
 HERE = Path(__file__).parent
 WORK = HERE / "_refbuild"
-OUT = HERE / "reference.docx"
+OUT = HERE / (sys.argv[1] if len(sys.argv) > 1 else "reference.docx")
 
 # ---------------------------------------------------------------- design knobs
 
@@ -27,6 +29,21 @@ BODY_SIZE = 21                  # half-points -> 10.5pt
 PAGE_W, PAGE_H = 12240, 15840   # US Letter, in DXA (1440 = 1 inch)
 MARGIN = 720                    # 0.5 inch
 RIGHT_TAB = PAGE_W - 2 * MARGIN  # 10800 -> where @@ sends the date
+
+# Vertical rhythm. SPACING scales every paragraph before/after value; LINE is
+# line height in 240ths (252 = 1.05 lines). Raise both to loosen a page that
+# reads tight. Both are overridable from the shell, so you can render a variant
+# without editing this file:
+#
+#   SPACING=1.75 LINE=276 python3 make_reference.py reference-roomy.docx
+#
+SPACING = float(os.environ.get("SPACING", 1.0))
+LINE = int(os.environ.get("LINE", 252))
+
+
+def sp(v):
+    """Scale a spacing value by SPACING, rounded to whole DXA."""
+    return int(round(v * SPACING))
 
 # ------------------------------------------------------------------- xml bits
 
@@ -54,7 +71,7 @@ STYLES = {
     # id: (name, pPr, rPr)
     "Normal": (
         "Normal",
-        f'{TABS}<w:spacing w:before="0" w:after="0" w:line="252" w:lineRule="auto"/>',
+        f'{TABS}<w:spacing w:before="0" w:after="0" w:line="{LINE}" w:lineRule="auto"/>',
         f'{rfonts(BODY_FONT)}<w:sz w:val="{BODY_SIZE}"/><w:szCs w:val="{BODY_SIZE}"/>',
     ),
     # First paragraph after a heading: no extra space, the heading supplies it.
@@ -66,7 +83,7 @@ STYLES = {
     # Subsequent paragraphs: this is the gap between entries within a section.
     "BodyText": (
         "Body Text",
-        f'{TABS}<w:spacing w:before="120" w:after="0"/>',
+        f'{TABS}<w:spacing w:before="{sp(120)}" w:after="0"/>',
         "",
     ),
     # Tight list items (bullets). The w:ind is what actually controls bullet
@@ -76,7 +93,7 @@ STYLES = {
     # then ind.
     "Compact": (
         "Compact",
-        f'{TABS}<w:spacing w:before="0" w:after="20"/>'
+        f'{TABS}<w:spacing w:before="0" w:after="{sp(20)}"/>'
         f'<w:ind w:left="288" w:hanging="180"/>',
         "",
     ),
@@ -85,7 +102,7 @@ STYLES = {
         "Heading 1",
         '<w:keepNext/>'
         '<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="3" w:color="000000"/></w:pBdr>'
-        '<w:spacing w:before="220" w:after="80"/>'
+        f'<w:spacing w:before="{sp(220)}" w:after="{sp(80)}"/>'
         '<w:outlineLvl w:val="0"/>',
         f'{rfonts(DISPLAY_FONT)}<w:b/><w:bCs/><w:caps/>'
         f'<w:color w:val="000000"/><w:spacing w:val="40"/>'
@@ -93,13 +110,13 @@ STYLES = {
     ),
     "Name": (
         "Name",
-        '<w:spacing w:before="0" w:after="40"/>',
+        f'<w:spacing w:before="0" w:after="{sp(40)}"/>',
         f'{rfonts(DISPLAY_FONT)}<w:b/><w:bCs/><w:spacing w:val="10"/>'
         f'<w:sz w:val="40"/><w:szCs w:val="40"/>',
     ),
     "Tagline": (
         "Tagline",
-        '<w:spacing w:before="0" w:after="40"/>',
+        f'<w:spacing w:before="0" w:after="{sp(40)}"/>',
         f'{rfonts(DISPLAY_FONT)}<w:caps/><w:color w:val="555555"/>'
         f'<w:spacing w:val="30"/><w:sz w:val="21"/><w:szCs w:val="21"/>',
     ),

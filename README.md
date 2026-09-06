@@ -108,6 +108,72 @@ Two things are load-bearing and worth knowing before you edit:
   `make_reference.py` does nothing unless something in `resume.md` references
   it, via a `#` heading level or a `custom-style` div.
 
+### Spacing and line height
+
+Vertical rhythm has its own two knobs, just above `STYLES`:
+
+```python
+SPACING = float(os.environ.get("SPACING", 1.0))   # multiplier on every before/after gap
+LINE    = int(os.environ.get("LINE", 252))        # line height, in 240ths of a line
+```
+
+`SPACING` is a plain multiplier — `1.0` is the current design, `1.5` is half
+again as much air. `LINE` is absolute rather than scaled: `240` is
+single-spaced, `252` is 1.05x, `276` is 1.15x.
+
+Spacing values are in DXA, twentieths of a point, so 20 DXA = 1pt:
+
+| Value in `STYLES` | Controls | Default |
+|---|---|---|
+| `sp(220)` | Space above a section heading | 11pt |
+| `sp(80)` | Space below the heading's rule | 4pt |
+| `sp(120)` | Gap between entries within a section | 6pt |
+| `sp(20)` | Gap between bullets | 1pt |
+| `sp(40)` | Space under the name and tagline | 2pt |
+| `LINE` | Line height inside a paragraph | 1.05x |
+
+`sp(0)` is still `0`, so `SPACING` only widens gaps that already exist.
+`FirstParagraph` and `Contact` never move however high you push it — by design,
+since the paragraph under a heading takes its air from the heading's own
+`after`.
+
+**To try a value without editing anything.** Both knobs read the environment,
+and the output filename is the first argument:
+
+```bash
+SPACING=1.75 LINE=276 python3 make_reference.py reference-roomy.docx
+pandoc resume.md --reference-doc=reference-roomy.docx \
+  --lua-filter=rightalign.lua -o roomy.docx
+```
+
+**To make it permanent.** Change the two defaults in place, then rebuild.
+
+**To tune one gap rather than all of them.** Leave `SPACING` at `1.0` and edit
+the single number. Loosening only the gap between entries, 6pt to 9pt:
+
+```python
+"BodyText": (
+    "Body Text",
+    f'{TABS}<w:spacing w:before="{sp(180)}" w:after="0"/>',
+    "",
+),
+```
+
+One trap worth knowing: `SPACING=1.75 ./build.sh` looks right and quietly does
+nothing. `build.sh` regenerates `reference.docx` only when it is missing or
+older than `make_reference.py`, so with a current reference file the variable is
+never read — no error, just the old spacing. Delete the reference first:
+
+```bash
+rm reference.docx && SPACING=1.75 ./build.sh
+```
+
+Editing `make_reference.py` itself is fine, since that updates its timestamp.
+That comparison is whole-second on macOS's bash 3.2 though, so an edit and a
+build inside the same second can miss each other — another reason
+`rm reference.docx` is the reliable move.
+
+
 ## Other output formats
 
 The Lua filter degrades gracefully — `@@` becomes a plain space outside DOCX:

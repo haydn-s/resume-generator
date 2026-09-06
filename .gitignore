@@ -4,8 +4,8 @@
 *Resume*.md
 !*.template.md
 
-# Build output. ./build.sh regenerates these.
-reference.docx
-resume.docx
-resume-*.docx
+# Build output and any rendered resume, whatever it's named.
+# ./build.sh regenerates these; Resume_Template.docx is a tracked design source.
+*.docx
+!Resume_Template.docx
 _refbuild/
