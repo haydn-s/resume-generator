@@ -25,11 +25,11 @@ def main(argv):
         print(read(path, "document.xml").count("@@"))
     elif cmd == "style-attr":
         sid, attr = argv[2], argv[3]
-        blk = re.search(r'w:styleId="%s".*?</w:style>' % re.escape(sid),
-                        read(path, "styles.xml"), re.S)
+        pattern = rf'w:styleId="{re.escape(sid)}".*?</w:style>'
+        blk = re.search(pattern, read(path, "styles.xml"), re.DOTALL)
         if not blk:
             sys.exit("no such style: " + sid)
-        m = re.search(r'%s="([^"]+)"' % re.escape(attr), blk.group(0))
+        m = re.search(rf'{re.escape(attr)}="([^"]+)"', blk.group(0))
         print(m.group(1) if m else "")
     else:
         sys.exit(USAGE)

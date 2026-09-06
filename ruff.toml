@@ -1,0 +1,25 @@
+# Explicit lint configuration.
+#
+# Running `ruff check` bare means the rule set is whatever the installed
+# version defaults to, which changes between releases and turns an unrelated
+# upstream bump into a red build. Selecting rules by name pins the contract.
+#
+# target-version matters here: the pipeline must keep running on the Python 3.9
+# that stock macOS ships, so ruff must not suggest newer syntax.
+
+target-version = "py39"
+line-length = 100
+
+[lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # import ordering
+    "B",    # bugbear
+    "UP",   # pyupgrade, bounded by target-version
+    "RUF",  # ruff's own rules
+    "ISC",  # implicit string concatenation
+    "EXE",  # shebang / executable-bit agreement
+    "FURB", # readability refurbishments
+]

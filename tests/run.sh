@@ -12,7 +12,7 @@
 # are skipped, not failed, so a local run without shellcheck still works.
 #
 set -uo pipefail
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 PASS=0; FAIL=0; SKIP=0
 if [ -z "${NO_COLOR:-}" ] && { [ -t 1 ] || [ -n "${CI:-}" ]; }; then

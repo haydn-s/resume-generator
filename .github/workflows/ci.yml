@@ -24,7 +24,10 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends shellcheck
-          pipx install ruff
+          # Pinned deliberately. ruff.toml fixes which rules run, but a rule can
+          # still get stricter within a family between releases, which turns an
+          # unrelated upstream bump into a red build. Bump this on purpose.
+          pipx install ruff==0.16.6
       - name: Run privacy and lint checks
         run: tests/run.sh privacy lint
 
