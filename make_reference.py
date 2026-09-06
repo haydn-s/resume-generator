@@ -108,6 +108,19 @@ STYLES = {
         f'<w:color w:val="000000"/><w:spacing w:val="40"/>'
         f'<w:sz w:val="21"/><w:szCs w:val="21"/>',
     ),
+    # Company headings inside a section: bold, no rule -- the rule stays
+    # exclusive to Heading1 so the two levels never compete. TABS is required
+    # here or @@ has no right stop to land on inside a heading.
+    "Heading2": (
+        "Heading 2",
+        '<w:keepNext/>'
+        f'{TABS}'
+        f'<w:spacing w:before="{sp(140)}" w:after="{sp(40)}"/>'
+        '<w:outlineLvl w:val="1"/>',
+        f'{rfonts(DISPLAY_FONT)}<w:b/><w:bCs/>'
+        f'<w:color w:val="000000"/>'
+        f'<w:sz w:val="22"/><w:szCs w:val="22"/>',
+    ),
     "Name": (
         "Name",
         f'<w:spacing w:before="0" w:after="{sp(40)}"/>',
