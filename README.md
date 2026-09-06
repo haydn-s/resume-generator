@@ -252,6 +252,12 @@ Distribution packages lag behind, so `apt` and `dnf` on an older release can
 land you below 2.17. If they do, uninstall and use the `.deb` or `.rpm` from
 the releases page instead.
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the commit-message convention
+(Conventional Commits, enforced by commitlint in CI) and what to run before
+opening a pull request.
+
 ## Tests
 
 ```bash
@@ -268,7 +274,7 @@ so a local run without `shellcheck` still works.
 |---|---|
 | `privacy` | No personal content is tracked; `.gitignore` covers the filenames that matter and doesn't over-match project files. |
 | `build` | The fresh-clone flow works, a missing `resume.md` errors helpfully, every preset builds, an unknown preset exits nonzero, all eight paragraph styles reach the DOCX, every `@@` becomes a tab, and a preset visibly changes the output. |
-| `lint` | No dangling `\` before a blank line, no bullet carrying an `@@` date, shell and Python parse, plus shellcheck and ruff when installed. Ruff's rules are pinned in `ruff.toml`, targeting py39 so it never suggests syntax the stock-macOS interpreter can't run. |
+| `lint` | No dangling `\` before a blank line, no bullet carrying an `@@` date, shell and Python parse, commit messages are conventional, plus shellcheck, ruff and commitlint when installed. Ruff's rules are pinned in `ruff.toml`, targeting py39 so it never suggests syntax the stock-macOS interpreter can't run. |
 | `docs` | README fences balance and it parses; every preset the README names exists in `presets.ini`. |
 
 Two of those encode decisions rather than mechanics, and are worth knowing

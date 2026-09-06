@@ -10,3 +10,7 @@
 *.pdf
 !Resume_Template.docx
 _refbuild/
+
+# commitlint pulls these in when the checks are run locally.
+node_modules/
+package-lock.json

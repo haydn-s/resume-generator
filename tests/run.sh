@@ -39,9 +39,14 @@ git ls-files --cached --others --exclude-standard -z | while IFS= read -r -d '' 
 done
 sb() { ( cd "$SANDBOX" && "$@" ); }
 
-# Every .md in the tree except the README, so a local run also lints the
-# personal resumes that CI never sees.
-md_files() { find . -name '*.md' -not -path './.git/*' -not -name 'README.md' | sort; }
+# Resume source markdown only. Project documentation is excluded: these checks
+# are about how an entry is written, and prose that *describes* the rules would
+# otherwise trip them. Everything else in the tree is included, so a local run
+# also lints the personal resumes CI never sees.
+md_files() {
+  find . -name '*.md' -not -path './.git/*' \
+    -not -name 'README.md' -not -name 'CONTRIBUTING.md' | sort
+}
 
 # ---------------------------------------------------------------- privacy
 if want privacy; then
@@ -178,6 +183,24 @@ for f in ['make_reference.py', 'tests/lib/docx.py']:
         bad.append('%s:%s %s' % (f, e.lineno, e.msg))
 print('\n'.join(bad))")
   if [ -z "$pyerr" ]; then pass "python parses"; else fail "python syntax error" "$pyerr"; fi
+
+  # commitlint needs Node, which the rest of this project does not. Skipped
+  # when absent so a local run stays dependency-free; CI always runs it.
+  cl=""
+  command -v commitlint >/dev/null && cl=commitlint
+  [ -x node_modules/.bin/commitlint ] && cl=node_modules/.bin/commitlint
+  if [ -n "$cl" ]; then
+    base=$(git merge-base origin/main HEAD 2>/dev/null || echo "")
+    if [ -z "$base" ]; then
+      skip "commitlint" "no origin/main to compare against"
+    elif out=$("$cl" --from "$base" --to HEAD 2>&1); then
+      pass "commit messages are conventional"
+    else
+      fail "commitlint findings" "$out"
+    fi
+  else
+    skip "commitlint" "not installed; npx @commitlint/cli"
+  fi
 
   if command -v ruff >/dev/null; then
     rf=$(ruff check make_reference.py tests/lib/docx.py 2>&1)
