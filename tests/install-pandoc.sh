@@ -13,8 +13,13 @@ set -euo pipefail
 
 ver="${1:?usage: install-pandoc.sh VERSION|latest}"
 if [ "$ver" = latest ]; then
-  ver=$(curl -fsSL https://api.github.com/repos/jgm/pandoc/releases/latest \
-        | sed -n 's/.*"tag_name": *"\([^"]*\)".*/\1/p' | head -1)
+  # Resolved from the releases redirect, not api.github.com. The anonymous
+  # API allows 60 requests an hour per IP, CI runners share outbound IPs, and
+  # the resulting 403 fails the build for reasons unrelated to the code --
+  # intermittently, which is worse. The redirect carries no such limit.
+  ver=$(curl -fsSLI --retry 3 -o /dev/null -w '%{url_effective}' \
+        "https://github.com/jgm/pandoc/releases/latest" | sed 's|.*/tag/||')
+  [ -n "$ver" ] || { echo "could not resolve the latest pandoc release" >&2; exit 1; }
   echo "latest resolves to $ver"
 fi
 
