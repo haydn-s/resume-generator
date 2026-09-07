@@ -177,6 +177,23 @@ presets in presets.ini:
   onepage  body_size = 20, margin = 576, spacing = 0.7, line = 240, bullet_right = 720
 ```
 
+#### Changing a value from the command line
+
+```bash
+./build.sh --set clean.bullet_right=1800
+```
+
+That writes straight to `presets.ini`. The key has to exist in `[DEFAULT]` and
+the value has to parse as the same type, so a typo fails immediately instead of
+at build time. A key the preset merely inherits is added to it.
+
+Comments survive: the file is edited line by line rather than through
+`configparser.write()`, which discards every comment — and `presets.ini` is
+mostly comments explaining what the numbers mean. What the command can't do is
+keep a comment *true*. Change `bullet_right` and the `# 1.5in` beside it still
+says 1.5in, so it tells you which comment it preserved and leaves the judgement
+to you.
+
 Each preset caches its own `build/reference-<preset>.docx`, so switching back and
 forth doesn't rebuild every time. A carrier is regenerated when it is older than
 either `tools/make_reference.py` or `presets.ini`, so editing a preset takes effect on

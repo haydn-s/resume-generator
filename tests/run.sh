@@ -172,6 +172,35 @@ print('DEFAULT ' + ' '.join(c.sections()))")
     else
       fail "preset made no difference to the output" "DEFAULT=$a clean=$b"
     fi
+
+    # --set writes to presets.ini, so it runs last: the sandbox copy is edited,
+    # never the real file. Comments are the thing at risk -- configparser.write()
+    # would drop every one of them.
+    kept_before=$(grep -c '#' "$SANDBOX/presets.ini")
+    sb ./build.sh --set clean.bullet_right=1234 >/dev/null 2>&1
+    kept_after=$(grep -c '#' "$SANDBOX/presets.ini")
+    written=$(sed -n '/^\[clean\]/,/^\[/p' "$SANDBOX/presets.ini" | grep bullet_right)
+    if printf '%s' "$written" | grep -q 1234 && [ "$kept_before" = "$kept_after" ]; then
+      pass "--set edits presets.ini and keeps all $kept_after comments"
+    else
+      fail "--set lost comments or did not write" "before=$kept_before after=$kept_after line=$written"
+    fi
+
+    # A key the section inherits must be inserted inside it, not after the
+    # following section's leading comment.
+    sb ./build.sh --set clean.spacing=1.9 >/dev/null 2>&1
+    if grep -B1 '^\[roomy\]' "$SANDBOX/presets.ini" | head -1 | grep -q '^#'; then
+      pass "--set inserts inside the target section"
+    else
+      fail "--set split the next section from its comment"
+    fi
+
+    refused=""
+    for spec in clean.no_such_key=1 clean.spacing=abc no_such_preset.spacing=1 malformed; do
+      sb ./build.sh --set "$spec" >/dev/null 2>&1 && refused="$refused $spec"
+    done
+    if [ -z "$refused" ]; then pass "--set rejects unknown keys, bad types and bad presets"
+    else fail "--set accepted:" "$refused"; fi
   fi
 fi
 

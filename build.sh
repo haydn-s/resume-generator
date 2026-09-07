@@ -33,6 +33,7 @@ arguments:
 options:
   -p, --preset NAME    build with a named design preset from presets.ini
   -l, --list-presets   show the available presets and exit
+      --set P.KEY=VAL  change a value in presets.ini and exit
   -h, --help           show this help and exit
 
 examples:
@@ -40,6 +41,7 @@ examples:
   build.sh resumes/acme.md                   -> resumes/out/acme.docx
   build.sh resumes/acme.md resumes/out/Acme_Corp.docx
   build.sh --preset clean resumes/resume.md
+  build.sh --set clean.bullet_right=1800
 
 Your resumes live in resumes/, which is gitignored in full, so nothing you
 write there can reach the repository. Design values live in presets.ini;
@@ -53,6 +55,9 @@ while [ $# -gt 0 ]; do
     -h|--help)  usage; exit 0 ;;
     -l|--list-presets)
                 exec python3 tools/make_reference.py --list-presets ;;
+    --set)      [ $# -ge 2 ] || { echo "--set needs PRESET.KEY=VALUE" >&2; exit 1; }
+                exec python3 tools/make_reference.py --set "$2" ;;
+    --set=*)    exec python3 tools/make_reference.py --set "${1#*=}" ;;
     -p|--preset)
                 [ $# -ge 2 ] || { echo "--preset needs a name" >&2; exit 1; }
                 PRESET="$2"; shift 2 ;;
