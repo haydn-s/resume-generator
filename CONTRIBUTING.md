@@ -8,7 +8,7 @@ tests/run.sh
 
 Nineteen checks across four groups — privacy, build, lint and docs. Builds run
 in a throwaway copy of the working tree, so the suite never touches your own
-`resume.md`. A check whose tool is missing is skipped rather than failed, so
+`resumes/`. A check whose tool is missing is skipped rather than failed, so
 this works without `shellcheck` and `ruff` installed; CI runs them regardless.
 
 You need Pandoc 2.17 or newer and Python 3.9 or newer. See the README's
@@ -40,7 +40,7 @@ The subject starts lower-case and takes no full stop. Types:
 | `refactor` | Restructuring that neither fixes a bug nor adds a feature |
 | `perf` | A performance improvement |
 | `test` | Anything under `tests/` |
-| `build` | `build.sh`, `make_reference.py`, the design pipeline itself |
+| `build` | `build.sh`, `tools/`, the design pipeline itself |
 | `ci` | `.github/workflows/`, lint configuration |
 | `chore` | Housekeeping that fits nothing above |
 
@@ -68,7 +68,7 @@ available locally, and skips it otherwise.
 
 Two rules encode decisions rather than style, and the test suite enforces both:
 
-- **No personal content.** Nothing matching a resume filename may be tracked.
+- **No personal content.** Nothing under `resumes/` or `build/` may be tracked.
   This repository is public and a rendered resume carries a phone number and
   an email address.
 - **No bullet carries an `@@` date.** A bullet's right indent moves its tab

@@ -1,16 +1,19 @@
-# Personal content. Private to each individual — never committed.
-# Templates are the exception: they hold placeholders, not real content.
-*resume*.md
-*Resume*.md
-!*.template.md
+# Everything personal lives in one directory, so privacy does not depend on
+# guessing filenames. A file called cover-letter.md or haydn_cv.pdf is covered
+# here; under the old filename patterns it would not have been.
+/resumes/*
+!/resumes/.gitkeep
+!/resumes/out/
+/resumes/out/*
+!/resumes/out/.gitkeep
 
-# Build output and any rendered resume, whatever it's named.
-# ./build.sh regenerates these; Resume_Template.docx is a tracked design source.
-*.docx
-*.pdf
-!Resume_Template.docx
-_refbuild/
+# Build artifacts. ./build.sh regenerates all of it.
+/build/
 
-# commitlint pulls these in when the checks are run locally.
+# Tooling caches.
+.ruff_cache/
 node_modules/
 package-lock.json
+
+# Word leaves these behind next to an open document.
+~$*
