@@ -7,32 +7,35 @@ Needs Pandoc — see [Installing Pandoc](#installing-pandoc) if you don't have i
 Then start from the template:
 
 ```bash
-cp resume.template.md resume.md
+cp templates/resume.template.md resumes/resume.md
 ./build.sh
 ```
 
-That reads `resume.md` and writes `resume.docx`.
+That reads `resumes/resume.md` and writes `resumes/out/resume.docx`.
 
-`resume.md` is gitignored, along with anything else matching `*resume*.md` —
-your content stays yours. Files ending in `.template.md` are the exception: they
-hold placeholders, so they're tracked and a fresh clone always has one to copy.
+Everything of yours lives in `resumes/`, which is gitignored in full — content
+and output both. The guarantee is structural rather than a filename pattern, so
+a `cover-letter.md` or a `haydn_cv.pdf` dropped in there is covered too.
 
 ## Files
 
-| File | What it is |
+| Path | What it is |
 |---|---|
-| `resume.template.md` | The starting point. Copy it to `resume.md`. Tracked. |
-| `resume.md` | **Your content.** The only file you normally edit. Gitignored. |
-| `reference.docx` | The design. Pandoc reads its styles and throws away its text. |
+| `resumes/` | **Yours.** Source markdown and built documents. Gitignored in full. |
+| `resumes/out/` | Where built documents land. |
+| `templates/resume.template.md` | The starting point. Copy it into `resumes/`. |
 | `presets.ini` | **The design values.** Fonts, sizes, spacing. Pick one with `--preset`. |
-| `make_reference.py` | Turns a preset into `reference.docx`. Holds the style structure. |
-| `rightalign.lua` | Turns the `@@` marker into a right-aligned tab. |
-| `build.sh` | Runs Pandoc with the right flags. |
+| `build.sh` | The one command you run. |
+| `tools/make_reference.py` | Turns a preset into the style carrier. Holds the style structure. |
+| `tools/rightalign.lua` | Turns the `@@` marker into a right-aligned tab. |
+| `tools/install-pandoc.sh` | Installs a given Pandoc release. Used by CI. |
+| `build/` | Generated style carriers. Disposable. |
+| `tests/` | The test suite. |
 
-Generated files (`reference.docx`, `resume.docx`) can be deleted at any time;
-`build.sh` rebuilds them.
+Anything under `build/` and `resumes/out/` can be deleted at any time;
+`build.sh` rebuilds it.
 
-## Writing `resume.md`
+## Writing your resume
 
 **Section headings** are `#`. They pick up the Heading 1 style — bold caps on a
 full-width rule.
@@ -67,7 +70,7 @@ Jane Q. Public
 :::
 ```
 
-`Name`, `Tagline`, and `Contact` are defined in `make_reference.py`.
+`Name`, `Tagline`, and `Contact` are defined in `tools/make_reference.py`.
 
 **Em dashes** are `---` and en dashes are `--`. Pandoc converts them.
 
@@ -76,9 +79,9 @@ Jane Q. Public
 Copy the file and cut:
 
 ```bash
-cp resume.md resume-acme.md
-# edit resume-acme.md down to what Acme cares about
-./build.sh resume-acme.md Resume_Acme.docx
+cp resumes/resume.md resumes/acme.md
+# edit resumes/acme.md down to what Acme cares about
+./build.sh resumes/acme.md resumes/out/Acme_Corp.docx
 ```
 
 Every variant renders with identical formatting, because the formatting isn't
@@ -88,7 +91,7 @@ in any of them.
 
 The design splits in two. Numbers — fonts, sizes, page geometry, spacing —
 live in `presets.ini`, so you can keep several looks side by side and choose
-between them at build time. Structure lives in `make_reference.py`, where
+between them at build time. Structure lives in `tools/make_reference.py`, where
 `STYLES` maps each style to its paragraph and run properties in raw OOXML.
 Change either, run `./build.sh`, and every resume you generate from then on
 picks it up.
@@ -99,7 +102,7 @@ Two things are load-bearing and worth knowing before you edit:
   the margins, the tab follows automatically — but only because it's computed.
   Don't hardcode it.
 - Pandoc only emits the style IDs listed in `STYLES`. Adding a style to
-  `make_reference.py` does nothing unless something in `resume.md` references
+  `tools/make_reference.py` does nothing unless something in your resume references
   it, via a `#` heading level or a `custom-style` div.
 
 ### Presets
@@ -128,7 +131,7 @@ line    = 276
 Pick one at build time:
 
 ```bash
-./build.sh --preset roomy resume.md Resume_Roomy.docx
+./build.sh --preset roomy resumes/resume.md
 ./build.sh                                   # [DEFAULT]
 ```
 
@@ -136,9 +139,9 @@ Three ship with the repo: `roomy` (looser, runs longer), `compact` (tighter),
 and `onepage` (smaller type and narrower margins as well). Add your own by
 copying a section and renaming it — any `[DEFAULT]` key can be overridden.
 
-Each preset caches its own `reference-<preset>.docx`, so switching back and
+Each preset caches its own `build/reference-<preset>.docx`, so switching back and
 forth doesn't rebuild every time. A carrier is regenerated when it is older than
-either `make_reference.py` or `presets.ini`, so editing a preset takes effect on
+either `tools/make_reference.py` or `presets.ini`, so editing a preset takes effect on
 the next build.
 
 #### What the values mean
@@ -170,16 +173,16 @@ same name in caps. Precedence is environment variable, then preset, then
 
 ```bash
 SPACING=2.0 ./build.sh --preset roomy
-BULLET_RIGHT=1800 python3 make_reference.py reference-test.docx
+BULLET_RIGHT=1800 python3 tools/make_reference.py build/reference-test.docx
 ```
 
 One trap: `build.sh` regenerates the style carrier only when it is missing or
-older than `make_reference.py` or `presets.ini`. It knows nothing about
+older than `tools/make_reference.py` or `presets.ini`. It knows nothing about
 environment variables, so with a current carrier `SPACING=2.0 ./build.sh` is
 silently a no-op — no error, just the old spacing. Delete the carrier first:
 
 ```bash
-rm reference.docx && SPACING=2.0 ./build.sh
+rm build/reference.docx && SPACING=2.0 ./build.sh
 ```
 
 That timestamp comparison is whole-second on macOS's bash 3.2, so an edit and a
@@ -191,8 +194,8 @@ reliable move.
 The Lua filter degrades gracefully — `@@` becomes a plain space outside DOCX:
 
 ```bash
-pandoc resume.md --lua-filter=rightalign.lua --strip-comments \
-  -t plain -o resume.txt
+pandoc resumes/resume.md --lua-filter=tools/rightalign.lua --strip-comments \
+  -t plain -o resumes/out/resume.txt
 ```
 
 `-t plain` is load-bearing. Pandoc maps a bare `.txt` extension to the
@@ -207,7 +210,7 @@ DOCX exactly.
 
 ## Installing Pandoc
 
-Pandoc does the actual conversion, and `make_reference.py` needs Python 3.
+Pandoc does the actual conversion, and `tools/make_reference.py` needs Python 3.
 macOS and most Linux distributions ship Python 3 already, so Pandoc is usually
 the only thing to install.
 
@@ -246,7 +249,7 @@ pandoc --version
 ```
 
 2.17 or newer is required — that's when the Lua `Inlines` filter that
-`rightalign.lua` depends on was added. Built and tested against 3.1.3.
+`tools/rightalign.lua` depends on was added. Built and tested against 3.1.3.
 
 Distribution packages lag behind, so `apt` and `dnf` on an older release can
 land you below 2.17. If they do, uninstall and use the `.deb` or `.rpm` from
@@ -266,14 +269,14 @@ tests/run.sh privacy lint    # only the named groups
 ```
 
 Groups are `privacy`, `build`, `lint` and `docs`. Builds run inside a throwaway
-copy of the working tree, so the suite never touches your own `resume.md` or
-`reference.docx`. A check whose tool is missing is skipped rather than failed,
+copy of the working tree, so the suite never touches your own `resumes/`
+or `build/`. A check whose tool is missing is skipped rather than failed,
 so a local run without `shellcheck` still works.
 
 | Group | What it checks |
 |---|---|
 | `privacy` | No personal content is tracked; `.gitignore` covers the filenames that matter and doesn't over-match project files. |
-| `build` | The fresh-clone flow works, a missing `resume.md` errors helpfully, every preset builds, an unknown preset exits nonzero, all eight paragraph styles reach the DOCX, every `@@` becomes a tab, and a preset visibly changes the output. |
+| `build` | The fresh-clone flow works, a missing source errors helpfully, every preset builds, an unknown preset exits nonzero, all eight paragraph styles reach the DOCX, every `@@` becomes a tab, and a preset visibly changes the output. |
 | `lint` | No dangling `\` before a blank line, no bullet carrying an `@@` date, shell and Python parse, commit messages are conventional, plus shellcheck, ruff and commitlint when installed. Ruff's rules are pinned in `ruff.toml`, targeting py39 so it never suggests syntax the stock-macOS interpreter can't run. |
 | `docs` | README fences balance and it parses; every preset the README names exists in `presets.ini`. |
 

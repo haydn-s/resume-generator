@@ -51,7 +51,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Install pandoc ${{ matrix.pandoc }}
-        run: tests/install-pandoc.sh '${{ matrix.pandoc }}'
+        run: tools/install-pandoc.sh '${{ matrix.pandoc }}'
       - name: Run build and docs checks
         run: tests/run.sh build docs
 
@@ -70,7 +70,7 @@ jobs:
         with:
           python-version: ${{ matrix.python }}
       - name: Install pandoc
-        run: tests/install-pandoc.sh latest
+        run: tools/install-pandoc.sh latest
       - name: Run build checks
         run: tests/run.sh build
 

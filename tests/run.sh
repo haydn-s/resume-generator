@@ -44,7 +44,7 @@ sb() { ( cd "$SANDBOX" && "$@" ); }
 # otherwise trip them. Everything else in the tree is included, so a local run
 # also lints the personal resumes CI never sees.
 md_files() {
-  find . -name '*.md' -not -path './.git/*' \
+  find . -name '*.md' -not -path './.git/*' -not -path './node_modules/*' \
     -not -name 'README.md' -not -name 'CONTRIBUTING.md' | sort
 }
 
@@ -52,23 +52,25 @@ md_files() {
 if want privacy; then
   group "Privacy"
 
-  leaked=$(git ls-files \
-    | grep -Ei '(resume.*\.md$|\.docx$|\.pdf$)' \
-    | grep -v '\.template\.md$' \
-    | grep -vx 'Resume_Template\.docx' || true)
-  if [ -z "$leaked" ]; then pass "no personal content is tracked"
-  else fail "personal content is tracked" "$leaked"; fi
+  leaked=$(git ls-files | grep -E '^(resumes|build)/' | grep -v '/\.gitkeep$' || true)
+  if [ -z "$leaked" ]; then pass "nothing tracked under resumes/ or build/"
+  else fail "personal or generated content is tracked" "$leaked"; fi
 
+  # The point of the directory rule: these are covered whatever they are
+  # called, including names no filename pattern would have anticipated.
   missed=""
-  for f in resume.md master_resume.md Haydn_Resume.md resume-acme.md \
-           My_Resume.docx Stucker_Resume.docx export.pdf; do
+  for f in resumes/resume.md resumes/master_resume.md resumes/cover-letter.md \
+           resumes/notes.txt resumes/anything.pdf resumes/out/Any_Name.docx \
+           build/reference.docx; do
     git check-ignore -q "$f" || missed="$missed $f"
   done
-  if [ -z "$missed" ]; then pass "gitignore covers personal filenames"
+  if [ -z "$missed" ]; then pass "resumes/ and build/ are ignored wholesale"
   else fail "gitignore does not cover:" "$missed"; fi
 
   over=""
-  for f in resume.template.md Resume_Template.docx README.md presets.ini build.sh; do
+  for f in templates/resume.template.md templates/Resume_Template.docx \
+           resumes/.gitkeep resumes/out/.gitkeep \
+           README.md presets.ini build.sh tools/make_reference.py; do
     git check-ignore -q "$f" && over="$over $f"
   done
   if [ -z "$over" ]; then pass "gitignore does not over-match project files"
@@ -82,14 +84,14 @@ if want build; then
   if ! command -v pandoc >/dev/null; then
     skip "all build checks" "pandoc not installed"
   else
-    if sb sh -c 'cp resume.template.md resume.md && ./build.sh' >/dev/null 2>&1; then
+    if sb sh -c 'cp templates/resume.template.md resumes/resume.md && ./build.sh' >/dev/null 2>&1; then
       pass "fresh-clone flow (cp template, ./build.sh)"
     else
       fail "fresh-clone flow failed"
     fi
 
-    out=$(sb sh -c 'rm -f resume.md; ./build.sh' 2>&1); rc=$?
-    if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'resume.template.md'; then
+    out=$(sb sh -c 'rm -f resumes/resume.md; ./build.sh' 2>&1); rc=$?
+    if [ "$rc" -ne 0 ] && printf '%s' "$out" | grep -q 'templates/resume.template.md'; then
       pass "missing resume.md errors and points at the template"
     else
       fail "missing resume.md did not error helpfully" "$out"
@@ -102,18 +104,18 @@ c.read('presets.ini')
 print('DEFAULT ' + ' '.join(c.sections()))")
     bad=""
     for p in $presets; do
-      sb ./build.sh --preset "$p" "$FX" "out-$p.docx" >/dev/null 2>&1 || bad="$bad $p"
+      sb ./build.sh --preset "$p" "$FX" "resumes/out/out-$p.docx" >/dev/null 2>&1 || bad="$bad $p"
     done
     if [ -z "$bad" ]; then pass "every preset builds ($presets)"
     else fail "presets failed to build:" "$bad"; fi
 
-    if sb ./build.sh --preset no-such-preset "$FX" o.docx >/dev/null 2>&1; then
+    if sb ./build.sh --preset no-such-preset "$FX" resumes/out/o.docx >/dev/null 2>&1; then
       fail "an unknown preset was silently accepted"
     else
       pass "unknown preset exits nonzero"
     fi
 
-    got=$(python3 tests/lib/docx.py styles "$SANDBOX/out-DEFAULT.docx" | tr '\n' ' ')
+    got=$(python3 tests/lib/docx.py styles "$SANDBOX/resumes/out/out-DEFAULT.docx" | tr '\n' ' ')
     missing=""
     for s in Name Tagline Contact Heading1 Heading2 FirstParagraph BodyText Compact; do
       printf '%s' "$got" | grep -qw "$s" || missing="$missing $s"
@@ -122,16 +124,16 @@ print('DEFAULT ' + ' '.join(c.sections()))")
     else fail "styles absent from output:" "$missing"; fi
 
     src=$(grep -o '@@' "$FX" | wc -l | tr -d ' ')
-    tabs=$(python3 tests/lib/docx.py tabs "$SANDBOX/out-DEFAULT.docx")
-    left=$(python3 tests/lib/docx.py literal-at "$SANDBOX/out-DEFAULT.docx")
+    tabs=$(python3 tests/lib/docx.py tabs "$SANDBOX/resumes/out/out-DEFAULT.docx")
+    left=$(python3 tests/lib/docx.py literal-at "$SANDBOX/resumes/out/out-DEFAULT.docx")
     if [ "$src" = "$tabs" ] && [ "$left" = "0" ]; then
       pass "@@ conversion ($src markers, $tabs tabs, 0 literal left)"
     else
       fail "@@ conversion mismatch" "source=$src tabs=$tabs literal_remaining=$left"
     fi
 
-    a=$(python3 tests/lib/docx.py style-attr "$SANDBOX/out-DEFAULT.docx" Compact 'w:right')
-    b=$(python3 tests/lib/docx.py style-attr "$SANDBOX/out-clean.docx" Compact 'w:right')
+    a=$(python3 tests/lib/docx.py style-attr "$SANDBOX/resumes/out/out-DEFAULT.docx" Compact 'w:right')
+    b=$(python3 tests/lib/docx.py style-attr "$SANDBOX/resumes/out/out-clean.docx" Compact 'w:right')
     if [ -n "$a" ] && [ "$a" != "$b" ]; then
       pass "presets reach the output (DEFAULT w:right=$a, clean=$b)"
     else
@@ -160,14 +162,15 @@ if want lint; then
   if [ -z "$dated" ]; then pass "no bullet carries an @@ date"
   else fail "dated bullets break alignment when bullet_right is set:" "$dated"; fi
 
-  if bash -n build.sh 2>/dev/null && bash -n tests/run.sh 2>/dev/null; then
+  if bash -n build.sh 2>/dev/null && bash -n tests/run.sh 2>/dev/null \
+     && bash -n tools/install-pandoc.sh 2>/dev/null; then
     pass "shell scripts parse"
   else
     fail "shell syntax error" "$(bash -n build.sh 2>&1; bash -n tests/run.sh 2>&1)"
   fi
 
   if command -v shellcheck >/dev/null; then
-    sc=$(shellcheck -S warning build.sh tests/run.sh 2>&1)
+    sc=$(shellcheck -S warning build.sh tests/run.sh tools/install-pandoc.sh 2>&1)
     if [ -z "$sc" ]; then pass "shellcheck clean"; else fail "shellcheck findings" "$sc"; fi
   else
     skip "shellcheck" "not installed"
@@ -176,7 +179,7 @@ if want lint; then
   pyerr=$(python3 -c "
 import ast
 bad = []
-for f in ['make_reference.py', 'tests/lib/docx.py']:
+for f in ['tools/make_reference.py', 'tests/lib/docx.py']:
     try:
         ast.parse(open(f).read(), f)
     except SyntaxError as e:
@@ -203,7 +206,7 @@ print('\n'.join(bad))")
   fi
 
   if command -v ruff >/dev/null; then
-    rf=$(ruff check make_reference.py tests/lib/docx.py 2>&1)
+    rf=$(ruff check tools/ tests/ 2>&1)
     if [ $? -eq 0 ]; then pass "ruff clean"; else fail "ruff findings" "$rf"; fi
   else
     skip "ruff" "not installed"
