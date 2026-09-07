@@ -81,8 +81,26 @@ fi
 if want build; then
   group "Build"
   FX=tests/fixtures/all-features.md
+
+  # The CLI surface needs no pandoc. --help in particular has to work on a
+  # machine that has not installed it yet, which is exactly when it is read.
+  if out=$(sb ./build.sh --help 2>&1) && printf '%s' "$out" | grep -q '^usage: build.sh'; then
+    pass "--help prints usage and exits 0"
+  else
+    fail "--help did not print usage" "$out"
+  fi
+
+  if sb ./build.sh -h >/dev/null 2>&1; then pass "-h is accepted"
+  else fail "-h was rejected"; fi
+
+  if sb ./build.sh --no-such-flag >/dev/null 2>&1; then
+    fail "an unknown option was silently accepted"
+  else
+    pass "unknown option exits nonzero"
+  fi
+
   if ! command -v pandoc >/dev/null; then
-    skip "all build checks" "pandoc not installed"
+    skip "remaining build checks" "pandoc not installed"
   else
     if sb sh -c 'cp templates/resume.template.md resumes/resume.md && ./build.sh' >/dev/null 2>&1; then
       pass "fresh-clone flow (cp template, ./build.sh)"
@@ -108,6 +126,21 @@ print('DEFAULT ' + ' '.join(c.sections()))")
     done
     if [ -z "$bad" ]; then pass "every preset builds ($presets)"
     else fail "presets failed to build:" "$bad"; fi
+
+    listed=$(sb ./build.sh --list-presets 2>&1)
+    absent=""
+    for p in $presets; do
+      printf '%s' "$listed" | grep -qw "$p" || absent="$absent $p"
+    done
+    if [ -z "$absent" ]; then pass "--list-presets shows every preset in presets.ini"
+    else fail "--list-presets omits:" "$absent"; fi
+
+    sb ./build.sh -p clean "$FX" resumes/out/short.docx >/dev/null 2>&1
+    sb ./build.sh --preset clean "$FX" resumes/out/long.docx >/dev/null 2>&1
+    a=$(python3 tests/lib/docx.py style-attr "$SANDBOX/resumes/out/short.docx" Compact 'w:right')
+    b=$(python3 tests/lib/docx.py style-attr "$SANDBOX/resumes/out/long.docx" Compact 'w:right')
+    if [ -n "$a" ] && [ "$a" = "$b" ]; then pass "-p and --preset agree (w:right=$a)"
+    else fail "-p and --preset disagree" "-p=$a --preset=$b"; fi
 
     if sb ./build.sh --preset no-such-preset "$FX" resumes/out/o.docx >/dev/null 2>&1; then
       fail "an unknown preset was silently accepted"

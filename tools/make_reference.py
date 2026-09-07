@@ -23,7 +23,43 @@ BUILD = ROOT / "build"
 WORK = BUILD / "_refbuild"
 CONFIG = ROOT / "presets.ini"
 
-USAGE = "usage: make_reference.py [--preset NAME] [output.docx]"
+USAGE = "usage: make_reference.py [options] [output.docx]"
+
+HELP = """usage: make_reference.py [options] [output.docx]
+
+Generate the style carrier Pandoc reads for the design. Values come from
+presets.ini; an environment variable of the same name in caps overrides one
+for a single run.
+
+options:
+  --preset NAME     build with a named preset (default: DEFAULT)
+  --list-presets    show the available presets and what each changes
+  -h, --help        show this help and exit
+
+With no output path this writes build/reference.docx, or
+build/reference-<preset>.docx when --preset is given. An explicit path is
+taken relative to the current directory.
+
+examples:
+  make_reference.py
+  make_reference.py --preset roomy
+  SPACING=1.5 make_reference.py build/reference-test.docx
+"""
+
+
+def list_presets():
+    """Print each preset and only the keys it actually overrides."""
+    cp = configparser.ConfigParser(inline_comment_prefixes=("#", ";"))
+    if not cp.read(CONFIG):
+        sys.exit(f"cannot read {CONFIG}")
+    defaults = dict(cp["DEFAULT"])
+    names = ["DEFAULT", *cp.sections()]
+    width = max(len(n) for n in names)
+    print(f"presets in {CONFIG.name}:\n")
+    print(f"  {'DEFAULT':{width}}  the baseline design")
+    for name in cp.sections():
+        diff = [f"{k} = {v}" for k, v in cp[name].items() if defaults.get(k) != v]
+        print(f"  {name:{width}}  {', '.join(diff) if diff else 'no overrides'}")
 
 
 def parse_args(argv):
@@ -32,6 +68,12 @@ def parse_args(argv):
     i = 0
     while i < len(argv):
         a = argv[i]
+        if a in ("-h", "--help"):
+            print(HELP, end="")
+            sys.exit(0)
+        if a == "--list-presets":
+            list_presets()
+            sys.exit(0)
         if a == "--preset":
             i += 1
             if i >= len(argv):

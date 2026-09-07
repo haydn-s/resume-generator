@@ -13,6 +13,11 @@ cp templates/resume.template.md resumes/resume.md
 
 That reads `resumes/resume.md` and writes `resumes/out/resume.docx`.
 
+```bash
+./build.sh --help          # every option, with examples
+./build.sh --list-presets  # the presets and what each one changes
+```
+
 Everything of yours lives in `resumes/`, which is gitignored in full — content
 and output both. The guarantee is structural rather than a filename pattern, so
 a `cover-letter.md` or a `haydn_cv.pdf` dropped in there is covered too.
@@ -154,9 +159,23 @@ Pick one at build time:
 ./build.sh                                   # [DEFAULT]
 ```
 
-Three ship with the repo: `roomy` (looser, runs longer), `compact` (tighter),
-and `onepage` (smaller type and narrower margins as well). Add your own by
-copying a section and renaming it — any `[DEFAULT]` key can be overridden.
+Four ship with the repo: `clean` (bullets well clear of the date column),
+`roomy` (looser, runs longer), `compact` (tighter), and `onepage` (smaller type
+and narrower margins as well). Add your own by copying a section and renaming
+it — any `[DEFAULT]` key can be overridden.
+
+`./build.sh --list-presets` prints them along with the keys each one overrides,
+so you don't have to open the file to remember what `compact` does:
+
+```
+presets in presets.ini:
+
+  DEFAULT  the baseline design
+  clean    bullet_right = 2160
+  roomy    spacing = 1.75, line = 276
+  compact  spacing = 0.8, line = 240, bullet_right = 720
+  onepage  body_size = 20, margin = 576, spacing = 0.7, line = 240, bullet_right = 720
+```
 
 Each preset caches its own `build/reference-<preset>.docx`, so switching back and
 forth doesn't rebuild every time. A carrier is regenerated when it is older than
