@@ -52,7 +52,7 @@ def load_preset(name):
     if not cp.read(CONFIG):
         sys.exit(f"cannot read {CONFIG}")
     if name != "DEFAULT" and not cp.has_section(name):
-        known = ", ".join(["DEFAULT"] + cp.sections())
+        known = ", ".join(["DEFAULT", *cp.sections()])
         sys.exit(f"no preset {name!r} in {CONFIG.name}. Available: {known}")
     return cp["DEFAULT"] if name == "DEFAULT" else cp[name]
 
@@ -100,7 +100,7 @@ BULLET_RIGHT = knob("bullet_right", int)
 
 def sp(v):
     """Scale a spacing value by SPACING, rounded to whole DXA."""
-    return int(round(v * SPACING))
+    return round(v * SPACING)
 
 # ------------------------------------------------------------------- xml bits
 
@@ -155,45 +155,45 @@ STYLES = {
     # then ind.
     "Compact": (
         "Compact",
-        f'{BULLET_TABS}<w:spacing w:before="0" w:after="{sp(20)}"/>'
-        f'<w:ind w:left="288" w:right="{BULLET_RIGHT}" w:hanging="180"/>',
+        (f'{BULLET_TABS}<w:spacing w:before="0" w:after="{sp(20)}"/>'
+         f'<w:ind w:left="288" w:right="{BULLET_RIGHT}" w:hanging="180"/>'),
         "",
     ),
     # Section headings: bold caps on a full-width rule, kept with what follows.
     "Heading1": (
         "Heading 1",
-        '<w:keepNext/>'
-        '<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="3" w:color="000000"/></w:pBdr>'
-        f'<w:spacing w:before="{sp(220)}" w:after="{sp(80)}"/>'
-        '<w:outlineLvl w:val="0"/>',
-        f'{rfonts(DISPLAY_FONT)}<w:b/><w:bCs/><w:caps/>'
-        f'<w:color w:val="000000"/><w:spacing w:val="40"/>'
-        f'<w:sz w:val="21"/><w:szCs w:val="21"/>',
+        ('<w:keepNext/>'
+         '<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="3" w:color="000000"/></w:pBdr>'
+         f'<w:spacing w:before="{sp(220)}" w:after="{sp(80)}"/>'
+         '<w:outlineLvl w:val="0"/>'),
+        (f'{rfonts(DISPLAY_FONT)}<w:b/><w:bCs/><w:caps/>'
+         f'<w:color w:val="000000"/><w:spacing w:val="40"/>'
+         f'<w:sz w:val="21"/><w:szCs w:val="21"/>'),
     ),
     # Company headings inside a section: bold, no rule -- the rule stays
     # exclusive to Heading1 so the two levels never compete. TABS is required
     # here or @@ has no right stop to land on inside a heading.
     "Heading2": (
         "Heading 2",
-        '<w:keepNext/>'
-        f'{TABS}'
-        f'<w:spacing w:before="{sp(140)}" w:after="{sp(40)}"/>'
-        '<w:outlineLvl w:val="1"/>',
-        f'{rfonts(DISPLAY_FONT)}<w:b/><w:bCs/>'
-        f'<w:color w:val="000000"/>'
-        f'<w:sz w:val="22"/><w:szCs w:val="22"/>',
+        ('<w:keepNext/>'
+         f'{TABS}'
+         f'<w:spacing w:before="{sp(140)}" w:after="{sp(40)}"/>'
+         '<w:outlineLvl w:val="1"/>'),
+        (f'{rfonts(DISPLAY_FONT)}<w:b/><w:bCs/>'
+         f'<w:color w:val="000000"/>'
+         f'<w:sz w:val="22"/><w:szCs w:val="22"/>'),
     ),
     "Name": (
         "Name",
         f'<w:spacing w:before="0" w:after="{sp(40)}"/>',
-        f'{rfonts(DISPLAY_FONT)}<w:b/><w:bCs/><w:spacing w:val="10"/>'
-        f'<w:sz w:val="40"/><w:szCs w:val="40"/>',
+        (f'{rfonts(DISPLAY_FONT)}<w:b/><w:bCs/><w:spacing w:val="10"/>'
+         f'<w:sz w:val="40"/><w:szCs w:val="40"/>'),
     ),
     "Tagline": (
         "Tagline",
         f'<w:spacing w:before="0" w:after="{sp(40)}"/>',
-        f'{rfonts(DISPLAY_FONT)}<w:caps/><w:color w:val="555555"/>'
-        f'<w:spacing w:val="30"/><w:sz w:val="21"/><w:szCs w:val="21"/>',
+        (f'{rfonts(DISPLAY_FONT)}<w:caps/><w:color w:val="555555"/>'
+         f'<w:spacing w:val="30"/><w:sz w:val="21"/><w:szCs w:val="21"/>'),
     ),
     "Contact": (
         "Contact",
@@ -242,7 +242,7 @@ def main():
 
         pattern = re.compile(
             r'<w:style [^>]*w:styleId="' + re.escape(sid) + r'".*?</w:style>',
-            re.S)
+            re.DOTALL)
         if pattern.search(s):
             s = pattern.sub(new, s, count=1)
         else:
@@ -257,7 +257,7 @@ def main():
         + rfonts(BODY_FONT)
         + f'<w:sz w:val="{BODY_SIZE}"/><w:szCs w:val="{BODY_SIZE}"/>'
         + '</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr/></w:pPrDefault></w:docDefaults>',
-        s, flags=re.S)
+        s, flags=re.DOTALL)
 
     spath.write_text(s, encoding="utf-8")
 
@@ -280,7 +280,7 @@ def main():
         block = re.sub(r'<w:tabs>\s*<w:tab w:val="num"[^/]*/>\s*</w:tabs>', '', block)
         return block
 
-    n = re.sub(r'<w:lvl w:ilvl="0".*?</w:lvl>', fix_bullet, n, flags=re.S)
+    n = re.sub(r'<w:lvl w:ilvl="0".*?</w:lvl>', fix_bullet, n, flags=re.DOTALL)
     npath.write_text(n, encoding="utf-8")
 
     # ---- document.xml: page size and margins ----
@@ -290,7 +290,7 @@ def main():
     if re.search(r'<w:sectPr\b[^>]*/>', d):
         d = re.sub(r'<w:sectPr\b[^>]*/>', SECT_PR, d, count=1)
     elif "<w:sectPr" in d:
-        d = re.sub(r'<w:sectPr.*?</w:sectPr>', SECT_PR, d, flags=re.S, count=1)
+        d = re.sub(r'<w:sectPr.*?</w:sectPr>', SECT_PR, d, flags=re.DOTALL, count=1)
     else:
         d = d.replace("</w:body>", SECT_PR + "</w:body>")
     assert 'w:pgMar' in d, "page setup not applied"
