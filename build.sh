@@ -20,14 +20,51 @@ SRC_DIR=resumes
 OUT_DIR=resumes/out
 BUILD_DIR=build
 
+usage() {
+  cat <<'USAGE'
+usage: build.sh [options] [SOURCE] [OUTPUT]
+
+Build a DOCX resume from Markdown.
+
+arguments:
+  SOURCE   markdown to build   (default: resumes/resume.md)
+  OUTPUT   docx to write       (default: resumes/out/<source>.docx)
+
+options:
+  -p, --preset NAME    build with a named design preset from presets.ini
+  -l, --list-presets   show the available presets and exit
+      --set P.KEY=VAL  change a value in presets.ini and exit
+  -h, --help           show this help and exit
+
+examples:
+  build.sh                                   resumes/resume.md -> resumes/out/resume.docx
+  build.sh resumes/acme.md                   -> resumes/out/acme.docx
+  build.sh resumes/acme.md resumes/out/Acme_Corp.docx
+  build.sh --preset clean resumes/resume.md
+  build.sh --set clean.bullet_right=1800
+
+Your resumes live in resumes/, which is gitignored in full, so nothing you
+write there can reach the repository. Design values live in presets.ini;
+README.md explains what each one controls.
+USAGE
+}
+
 PRESET=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --preset)   [ $# -ge 2 ] || { echo "--preset needs a name" >&2; exit 1; }
+    -h|--help)  usage; exit 0 ;;
+    -l|--list-presets)
+                exec python3 tools/make_reference.py --list-presets ;;
+    --set)      [ $# -ge 2 ] || { echo "--set needs PRESET.KEY=VALUE" >&2; exit 1; }
+                exec python3 tools/make_reference.py --set "$2" ;;
+    --set=*)    exec python3 tools/make_reference.py --set "${1#*=}" ;;
+    -p|--preset)
+                [ $# -ge 2 ] || { echo "--preset needs a name" >&2; exit 1; }
                 PRESET="$2"; shift 2 ;;
     --preset=*) PRESET="${1#*=}"; shift ;;
+    -p=*)       PRESET="${1#*=}"; shift ;;
     --)         shift; break ;;
-    -*)         echo "unknown option: $1" >&2; exit 1 ;;
+    -*)         echo "unknown option: $1" >&2; usage >&2; exit 1 ;;
     *)          break ;;
   esac
 done

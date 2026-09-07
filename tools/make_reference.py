@@ -23,7 +23,133 @@ BUILD = ROOT / "build"
 WORK = BUILD / "_refbuild"
 CONFIG = ROOT / "presets.ini"
 
-USAGE = "usage: make_reference.py [--preset NAME] [output.docx]"
+USAGE = "usage: make_reference.py [options] [output.docx]"
+
+HELP = """usage: make_reference.py [options] [output.docx]
+
+Generate the style carrier Pandoc reads for the design. Values come from
+presets.ini; an environment variable of the same name in caps overrides one
+for a single run.
+
+options:
+  --preset NAME     build with a named preset (default: DEFAULT)
+  --list-presets    show the available presets and what each changes
+  --set P.KEY=VAL   change a value in presets.ini and exit
+  -h, --help        show this help and exit
+
+With no output path this writes build/reference.docx, or
+build/reference-<preset>.docx when --preset is given. An explicit path is
+taken relative to the current directory.
+
+examples:
+  make_reference.py
+  make_reference.py --preset roomy
+  make_reference.py --set clean.bullet_right=1800
+  SPACING=1.5 make_reference.py build/reference-test.docx
+"""
+
+
+def _infer_cast(raw):
+    """Type of a key, taken from whatever [DEFAULT] holds for it."""
+    for cast in (int, float):
+        try:
+            cast(raw)
+            return cast
+        except ValueError:
+            continue
+    return str
+
+
+def set_value(spec):
+    """--set PRESET.KEY=VALUE, edited in place.
+
+    Written line by line rather than through configparser.write(), which
+    discards every comment in the file. presets.ini is mostly comments
+    explaining what the numbers mean, so losing them would cost more than the
+    command is worth.
+    """
+    m = re.match(r"^([A-Za-z0-9_-]+)\.([A-Za-z0-9_]+)=(.*)$", spec)
+    if not m:
+        sys.exit(f"--set wants PRESET.KEY=VALUE, got {spec!r}\n{USAGE}")
+    preset, key, value = m.group(1), m.group(2), m.group(3).strip()
+
+    cp = configparser.ConfigParser(inline_comment_prefixes=("#", ";"))
+    if not cp.read(CONFIG):
+        sys.exit(f"cannot read {CONFIG}")
+    if preset != "DEFAULT" and not cp.has_section(preset):
+        known = ", ".join(["DEFAULT", *cp.sections()])
+        sys.exit(f"no preset {preset!r}. Available: {known}")
+    defaults = dict(cp["DEFAULT"])
+    if key not in defaults:
+        sys.exit(f"unknown key {key!r}. Valid keys: {', '.join(sorted(defaults))}")
+
+    cast = _infer_cast(defaults[key])
+    try:
+        cast(value)
+    except ValueError:
+        sys.exit(f"{key} expects {cast.__name__}, got {value!r}")
+
+    before = cp["DEFAULT"][key] if preset == "DEFAULT" else cp[preset][key]
+
+    lines = CONFIG.read_text().split("\n")
+    start = next((i for i, ln in enumerate(lines)
+                  if ln.strip() == f"[{preset}]"), None)
+    if start is None:
+        sys.exit(f"no [{preset}] section in {CONFIG.name}")
+    end = next((i for i in range(start + 1, len(lines))
+                if lines[i].lstrip().startswith("[")), len(lines))
+
+    stale_comment = None
+    pat = re.compile(r"^(\s*" + re.escape(key) + r"\s*=\s*)([^#;]*?)(\s*)([#;].*)?$")
+    for i in range(start + 1, end):
+        m2 = pat.match(lines[i])
+        if not m2:
+            continue
+        head, old_val, gap, comment = m2.group(1), m2.group(2), m2.group(3), m2.group(4)
+        if comment:
+            # Any inline comment here may describe the old value -- often in
+            # different units, like "# 1.5in" beside 2160 -- so matching on the
+            # number itself misses the cases that matter. Flag them all and let
+            # the reader judge.
+            stale_comment = comment
+            # Keep the comment in the column it already occupied.
+            col = len(head) + len(old_val) + len(gap)
+            pad = max(1, col - len(head) - len(value))
+            lines[i] = head + value + " " * pad + comment
+        else:
+            lines[i] = head + value
+        break
+    else:
+        # Key is inherited rather than stated here, so add it. Anchor to the
+        # last actual key line, not the last non-blank one: a section is often
+        # followed by the *next* section's leading comment, and inserting after
+        # that would divorce the comment from what it describes.
+        last_kv = start
+        for j in range(start + 1, end):
+            if re.match(r"^\s*[A-Za-z0-9_]+\s*=", lines[j]):
+                last_kv = j
+        lines.insert(last_kv + 1, f"{key} = {value}")
+
+    CONFIG.write_text("\n".join(lines))
+    print(f"{CONFIG.name}: [{preset}] {key}  {before} -> {value}", flush=True)
+    if stale_comment:
+        print(f"  note: kept the inline comment verbatim -- check it still "
+              f"reads true: {stale_comment.strip()!r}", file=sys.stderr)
+
+
+def list_presets():
+    """Print each preset and only the keys it actually overrides."""
+    cp = configparser.ConfigParser(inline_comment_prefixes=("#", ";"))
+    if not cp.read(CONFIG):
+        sys.exit(f"cannot read {CONFIG}")
+    defaults = dict(cp["DEFAULT"])
+    names = ["DEFAULT", *cp.sections()]
+    width = max(len(n) for n in names)
+    print(f"presets in {CONFIG.name}:\n")
+    print(f"  {'DEFAULT':{width}}  the baseline design")
+    for name in cp.sections():
+        diff = [f"{k} = {v}" for k, v in cp[name].items() if defaults.get(k) != v]
+        print(f"  {name:{width}}  {', '.join(diff) if diff else 'no overrides'}")
 
 
 def parse_args(argv):
@@ -32,6 +158,21 @@ def parse_args(argv):
     i = 0
     while i < len(argv):
         a = argv[i]
+        if a in ("-h", "--help"):
+            print(HELP, end="")
+            sys.exit(0)
+        if a == "--list-presets":
+            list_presets()
+            sys.exit(0)
+        if a == "--set":
+            i += 1
+            if i >= len(argv):
+                sys.exit(f"--set needs PRESET.KEY=VALUE\n{USAGE}")
+            set_value(argv[i])
+            sys.exit(0)
+        if a.startswith("--set="):
+            set_value(a.split("=", 1)[1])
+            sys.exit(0)
         if a == "--preset":
             i += 1
             if i >= len(argv):

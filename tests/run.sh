@@ -81,8 +81,26 @@ fi
 if want build; then
   group "Build"
   FX=tests/fixtures/all-features.md
+
+  # The CLI surface needs no pandoc. --help in particular has to work on a
+  # machine that has not installed it yet, which is exactly when it is read.
+  if out=$(sb ./build.sh --help 2>&1) && printf '%s' "$out" | grep -q '^usage: build.sh'; then
+    pass "--help prints usage and exits 0"
+  else
+    fail "--help did not print usage" "$out"
+  fi
+
+  if sb ./build.sh -h >/dev/null 2>&1; then pass "-h is accepted"
+  else fail "-h was rejected"; fi
+
+  if sb ./build.sh --no-such-flag >/dev/null 2>&1; then
+    fail "an unknown option was silently accepted"
+  else
+    pass "unknown option exits nonzero"
+  fi
+
   if ! command -v pandoc >/dev/null; then
-    skip "all build checks" "pandoc not installed"
+    skip "remaining build checks" "pandoc not installed"
   else
     if sb sh -c 'cp templates/resume.template.md resumes/resume.md && ./build.sh' >/dev/null 2>&1; then
       pass "fresh-clone flow (cp template, ./build.sh)"
@@ -108,6 +126,21 @@ print('DEFAULT ' + ' '.join(c.sections()))")
     done
     if [ -z "$bad" ]; then pass "every preset builds ($presets)"
     else fail "presets failed to build:" "$bad"; fi
+
+    listed=$(sb ./build.sh --list-presets 2>&1)
+    absent=""
+    for p in $presets; do
+      printf '%s' "$listed" | grep -qw "$p" || absent="$absent $p"
+    done
+    if [ -z "$absent" ]; then pass "--list-presets shows every preset in presets.ini"
+    else fail "--list-presets omits:" "$absent"; fi
+
+    sb ./build.sh -p clean "$FX" resumes/out/short.docx >/dev/null 2>&1
+    sb ./build.sh --preset clean "$FX" resumes/out/long.docx >/dev/null 2>&1
+    a=$(python3 tests/lib/docx.py style-attr "$SANDBOX/resumes/out/short.docx" Compact 'w:right')
+    b=$(python3 tests/lib/docx.py style-attr "$SANDBOX/resumes/out/long.docx" Compact 'w:right')
+    if [ -n "$a" ] && [ "$a" = "$b" ]; then pass "-p and --preset agree (w:right=$a)"
+    else fail "-p and --preset disagree" "-p=$a --preset=$b"; fi
 
     if sb ./build.sh --preset no-such-preset "$FX" resumes/out/o.docx >/dev/null 2>&1; then
       fail "an unknown preset was silently accepted"
@@ -139,6 +172,35 @@ print('DEFAULT ' + ' '.join(c.sections()))")
     else
       fail "preset made no difference to the output" "DEFAULT=$a clean=$b"
     fi
+
+    # --set writes to presets.ini, so it runs last: the sandbox copy is edited,
+    # never the real file. Comments are the thing at risk -- configparser.write()
+    # would drop every one of them.
+    kept_before=$(grep -c '#' "$SANDBOX/presets.ini")
+    sb ./build.sh --set clean.bullet_right=1234 >/dev/null 2>&1
+    kept_after=$(grep -c '#' "$SANDBOX/presets.ini")
+    written=$(sed -n '/^\[clean\]/,/^\[/p' "$SANDBOX/presets.ini" | grep bullet_right)
+    if printf '%s' "$written" | grep -q 1234 && [ "$kept_before" = "$kept_after" ]; then
+      pass "--set edits presets.ini and keeps all $kept_after comments"
+    else
+      fail "--set lost comments or did not write" "before=$kept_before after=$kept_after line=$written"
+    fi
+
+    # A key the section inherits must be inserted inside it, not after the
+    # following section's leading comment.
+    sb ./build.sh --set clean.spacing=1.9 >/dev/null 2>&1
+    if grep -B1 '^\[roomy\]' "$SANDBOX/presets.ini" | head -1 | grep -q '^#'; then
+      pass "--set inserts inside the target section"
+    else
+      fail "--set split the next section from its comment"
+    fi
+
+    refused=""
+    for spec in clean.no_such_key=1 clean.spacing=abc no_such_preset.spacing=1 malformed; do
+      sb ./build.sh --set "$spec" >/dev/null 2>&1 && refused="$refused $spec"
+    done
+    if [ -z "$refused" ]; then pass "--set rejects unknown keys, bad types and bad presets"
+    else fail "--set accepted:" "$refused"; fi
   fi
 fi
 
