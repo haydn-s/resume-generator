@@ -24,6 +24,7 @@ a `cover-letter.md` or a `haydn_cv.pdf` dropped in there is covered too.
 | `resumes/` | **Yours.** Source markdown and built documents. Gitignored in full. |
 | `resumes/out/` | Where built documents land. |
 | `templates/resume.template.md` | The starting point. Copy it into `resumes/`. |
+| `templates/Resume_Template.docx` | The original Word design, kept as a reference. Not an input — see below. |
 | `presets.ini` | **The design values.** Fonts, sizes, spacing. Pick one with `--preset`. |
 | `build.sh` | The one command you run. |
 | `tools/make_reference.py` | Turns a preset into the style carrier. Holds the style structure. |
@@ -34,6 +35,24 @@ a `cover-letter.md` or a `haydn_cv.pdf` dropped in there is covered too.
 
 Anything under `build/` and `resumes/out/` can be deleted at any time;
 `build.sh` rebuilds it.
+
+### `Resume_Template.docx` is a specimen, not an input
+
+It is the hand-made Word document this pipeline was built to reproduce, and
+`[DEFAULT]` in `presets.ini` is copied from it — Calibri at 10.5pt, half-inch
+margins, US Letter. It is kept so the target is still inspectable.
+
+Nothing reads it at build time. Pandoc is handed `build/reference.docx`, which
+`tools/make_reference.py` generates from Pandoc's *own* default reference
+document, restyled from the preset you chose. The Word file is not part of that
+chain.
+
+The consequence is worth knowing before you open it: **editing it changes
+nothing.** Bump its body font to 11pt in Word, save, rebuild, and every resume
+still comes out at 10.5pt. The numbers live in `presets.ini`; this file is only
+where they were first copied from. It also predates the pipeline's own styles —
+`Name`, `Tagline`, `Contact` and `Compact` exist only in
+`tools/make_reference.py`, never in the Word original.
 
 ## Writing your resume
 
