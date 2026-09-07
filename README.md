@@ -278,6 +278,68 @@ That timestamp comparison is whole-second on macOS's bash 3.2, so an edit and a
 build inside the same second can miss each other — another reason `rm` is the
 reliable move.
 
+## Bringing your own design
+
+If you would rather design in Word than in `presets.ini`, hand `build.sh` your
+own reference document:
+
+```bash
+./build.sh --template mine.docx resumes/resume.md
+./build.sh --template classic            # resolves to templates/classic.docx
+```
+
+A bare name resolves to `templates/<name>.docx`; anything containing a slash or
+ending in `.docx` is used as a path. The file is passed straight to Pandoc and
+nothing is generated, so `--template` and `--preset` cannot be combined —
+presets shape the document this project generates, and a template replaces that
+step. Combining them is refused rather than silently ignored.
+
+### The contract
+
+Pandoc discards a reference document's text and keeps its styles, so what
+matters is which style IDs it defines. Define these and your design applies:
+
+| Style ID | Applied to |
+|---|---|
+| `Normal` | Base body text; everything else inherits from it. |
+| `FirstParagraph` | The first paragraph after a heading. |
+| `BodyText` | Later paragraphs — this is the gap between entries. |
+| `Compact` | List items, i.e. bullets. |
+| `Heading1` | `#` section headings. |
+| `Heading2` | `##` company headings. |
+| `Name`, `Tagline`, `Contact` | The header block, via `custom-style` divs. |
+
+One further requirement is easy to miss: **a right tab stop.** The `@@` marker
+becomes a literal tab, so a paragraph style that can carry a date needs a right
+tab stop at the text width or the date lands wherever the default stops fall
+rather than at the margin.
+
+Anything Pandoc does not emit cannot be styled. It knows 31 paragraph styles,
+and beyond those the only way to reach a new one is a `custom-style` div in your
+Markdown — which is exactly how `Name`, `Tagline` and `Contact` exist here.
+
+### Checking before you rely on it
+
+A missing style is not an error to Pandoc. It applies the style ID anyway, Word
+finds nothing by that name, and the paragraph quietly falls back to `Normal` —
+so the failure is silent and looks like a design that "didn't take". Check
+first:
+
+```bash
+python3 tools/make_reference.py --check-template mine.docx
+```
+
+It names the missing styles and tells you whether a right tab stop exists,
+exiting nonzero if anything is wrong. `build.sh --template` runs the same check
+and reports problems, but still builds — you may have dropped `Tagline`
+deliberately.
+
+Do not assume a document saved out of Word conforms. `templates/Resume_Template.docx`
+is a real example: Word gave it `Heading1`–`Heading6`, `Title` and a custom
+`SectionHeading`, but no `Normal`, `BodyText`, `Compact` or `FirstParagraph`,
+and no right tab stop. Run the check against it to see what a non-conforming
+document looks like.
+
 ## Other output formats
 
 The Lua filter degrades gracefully — `@@` becomes a plain space outside DOCX:

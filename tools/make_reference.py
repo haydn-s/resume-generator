@@ -35,6 +35,8 @@ options:
   --preset NAME     build with a named preset (default: DEFAULT)
   --list-presets    show the available presets and what each changes
   --set P.KEY=VAL   change a value in presets.ini and exit
+  --check-template FILE
+                    report whether a .docx meets the reference contract
   -h, --help        show this help and exit
 
 With no output path this writes build/reference.docx, or
@@ -47,6 +49,48 @@ examples:
   make_reference.py --set clean.bullet_right=1800
   SPACING=1.5 make_reference.py build/reference-test.docx
 """
+
+
+# The contract a reference document has to meet. Pandoc emits these style IDs
+# for a resume built from templates/resume.template.md; a document that does
+# not define one still gets the pStyle, and Word silently falls back to Normal.
+# A test asserts this matches what design() actually builds, so the two cannot
+# drift apart.
+REQUIRED_STYLES = (
+    "Normal", "FirstParagraph", "BodyText", "Compact",
+    "Heading1", "Heading2", "Name", "Tagline", "Contact",
+)
+
+
+def check_template(path):
+    """Report why a reference document would not render a resume correctly.
+
+    Returns a list of human-readable problems; empty means it satisfies the
+    contract. Missing styles are not fatal to Pandoc -- that is the danger, so
+    they are worth naming explicitly.
+    """
+    problems = []
+    try:
+        with zipfile.ZipFile(path) as z:
+            styles = z.read("word/styles.xml").decode("utf-8")
+    except (OSError, KeyError, zipfile.BadZipFile) as e:
+        return [f"not a readable .docx: {e}"]
+
+    defined = set(re.findall(r'w:styleId="([^"]+)"', styles))
+    missing = [s for s in REQUIRED_STYLES if s not in defined]
+    if missing:
+        problems.append(
+            "missing styles: " + ", ".join(missing)
+            + "\n    paragraphs using these fall back to Normal"
+        )
+
+    tabs = re.findall(r"<w:tab\b[^>]*>", styles)
+    if not any('w:val="right"' in t for t in tabs):
+        problems.append(
+            "no right tab stop defined"
+            "\n    the @@ marker emits a tab, so dates will not reach the margin"
+        )
+    return problems
 
 
 def _infer_cast(raw):
@@ -163,6 +207,18 @@ def parse_args(argv):
             sys.exit(0)
         if a == "--list-presets":
             list_presets()
+            sys.exit(0)
+        if a == "--check-template":
+            i += 1
+            if i >= len(argv):
+                sys.exit(f"--check-template needs a path\n{USAGE}")
+            found = check_template(argv[i])
+            if found:
+                print(f"{argv[i]}")
+                for pr in found:
+                    print(f"  {pr}")
+                sys.exit(1)
+            print(f"{argv[i]}: meets the reference contract")
             sys.exit(0)
         if a == "--set":
             i += 1

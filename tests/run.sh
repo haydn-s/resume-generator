@@ -213,6 +213,43 @@ print('DEFAULT ' + ' '.join(c.sections()))")
       fail "--set split the next section from its comment"
     fi
 
+    # --template: bring your own reference document.
+    sb python3 tools/make_reference.py build/good.docx >/dev/null 2>&1
+    if sb python3 tools/make_reference.py --check-template build/good.docx >/dev/null 2>&1; then
+      pass "--check-template accepts a generated reference"
+    else
+      fail "--check-template rejected our own reference document"
+    fi
+
+    # The Word original defines Heading1-6 and Title but no Normal, BodyText,
+    # Compact or custom styles -- a real example of a docx that is not yet a
+    # valid template, which is what makes it a useful fixture.
+    chk=$(sb python3 tools/make_reference.py --check-template templates/Resume_Template.docx 2>&1)
+    if [ -n "$chk" ] && printf '%s' "$chk" | grep -q 'missing styles' \
+       && printf '%s' "$chk" | grep -q 'right tab stop'; then
+      pass "--check-template names missing styles and the absent tab stop"
+    else
+      fail "--check-template did not report a non-conforming docx" "$chk"
+    fi
+
+    if sb ./build.sh --template build/good.docx "$FX" resumes/out/tpl.docx >/dev/null 2>&1; then
+      pass "--template builds from a supplied reference"
+    else
+      fail "--template failed on a conforming reference"
+    fi
+
+    if sb ./build.sh --template Resume_Template --preset clean "$FX" resumes/out/x.docx >/dev/null 2>&1; then
+      fail "--template and --preset were accepted together"
+    else
+      pass "--template with --preset is refused"
+    fi
+
+    if sb ./build.sh --template no_such_template "$FX" resumes/out/x.docx >/dev/null 2>&1; then
+      fail "an unknown template name was accepted"
+    else
+      pass "unknown template name exits nonzero"
+    fi
+
     refused=""
     for spec in clean.no_such_key=1 clean.spacing=abc no_such_preset.spacing=1 malformed; do
       sb ./build.sh --set "$spec" >/dev/null 2>&1 && refused="$refused $spec"
@@ -255,6 +292,23 @@ if want lint; then
   else
     skip "shellcheck" "not installed"
   fi
+
+  # --check-template starts lying the moment the declared contract and the
+  # styles design() actually builds disagree.
+  drift=$(python3 -c "
+import sys
+sys.path.insert(0, 'tools')
+import make_reference as m
+built = set(m.design(m.load_preset('DEFAULT'))['styles'])
+declared = set(m.REQUIRED_STYLES)
+out = []
+if built - declared:
+    out.append('design() builds but contract omits: ' + ', '.join(sorted(built - declared)))
+if declared - built:
+    out.append('contract requires but design() never builds: ' + ', '.join(sorted(declared - built)))
+print('; '.join(out))")
+  if [ -z "$drift" ]; then pass "template contract matches the generated styles"
+  else fail "REQUIRED_STYLES has drifted from design()" "$drift"; fi
 
   pyerr=$(python3 -c "
 import ast
