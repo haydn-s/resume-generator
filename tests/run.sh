@@ -165,6 +165,24 @@ print('DEFAULT ' + ' '.join(c.sections()))")
       fail "@@ conversion mismatch" "source=$src tabs=$tabs literal_remaining=$left"
     fi
 
+    # Two $...$ pairs in the fixture, so two equations. Pandoc writes math as
+    # OMML instead of text runs, which is the whole reason README.md argues
+    # against putting it anywhere a parser has to read.
+    math=$(python3 tests/lib/docx.py math "$SANDBOX/resumes/out/out-DEFAULT.docx")
+    if [ "$math" = "2" ]; then pass "LaTeX math renders as Word equations ($math)"
+    else fail "math conversion mismatch" "expected 2 equations, got $math"; fi
+
+    # Money is not math, and the failure would be quiet: an amount that reached
+    # the equation writer would leave a hole mid-sentence in the text a parser
+    # reads, while still looking correct in Word.
+    body=$(python3 tests/lib/docx.py text "$SANDBOX/resumes/out/out-DEFAULT.docx")
+    eaten=""
+    for amt in '$50k-$100k' '$1M' '$5M' '$75,000'; do
+      printf '%s' "$body" | grep -qF -- "$amt" || eaten="$eaten $amt"
+    done
+    if [ -z "$eaten" ]; then pass "dollar amounts stay text, not equations"
+    else fail "dollar amounts were read as math:" "$eaten"; fi
+
     a=$(python3 tests/lib/docx.py style-attr "$SANDBOX/resumes/out/out-DEFAULT.docx" Compact 'w:right')
     b=$(python3 tests/lib/docx.py style-attr "$SANDBOX/resumes/out/out-clean.docx" Compact 'w:right')
     if [ -n "$a" ] && [ "$a" != "$b" ]; then
