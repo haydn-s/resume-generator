@@ -3,7 +3,7 @@ import re
 import sys
 import zipfile
 
-USAGE = "usage: docx.py {styles|tabs|literal-at|style-attr} FILE [args]"
+USAGE = "usage: docx.py {styles|tabs|literal-at|math|text|style-attr} FILE [args]"
 
 
 def read(path, part):
@@ -23,6 +23,13 @@ def main(argv):
         print(len(re.findall(r"<w:tab/>", read(path, "document.xml"))))
     elif cmd == "literal-at":
         print(read(path, "document.xml").count("@@"))
+    elif cmd == "math":
+        print(len(re.findall(r"<m:oMath>", read(path, "document.xml"))))
+    elif cmd == "text":
+        # Word runs only. Equation text lives in <m:t>, and leaving it out is
+        # the point: this is the document as a w:t-walking reader sees it.
+        doc = read(path, "document.xml")
+        print(" ".join(re.findall(r"<w:t[^>]*>(.*?)</w:t>", doc, re.DOTALL)))
     elif cmd == "style-attr":
         sid, attr = argv[2], argv[3]
         pattern = rf'w:styleId="{re.escape(sid)}".*?</w:style>'

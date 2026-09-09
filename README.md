@@ -98,6 +98,40 @@ Jane Q. Public
 
 **Em dashes** are `---` and en dashes are `--`. Pandoc converts them.
 
+### LaTeX math renders, but keep it out of your bullets
+
+Pandoc reads `$...$` and `$$...$$` as math and writes real Word equation
+objects, so this needs no configuration and already works:
+
+```markdown
+- Cut median latency by reducing the sort to $O(n \log n)$.
+```
+
+It is still usually the wrong call. Word keeps an equation's text in its own
+`m:t` elements instead of the `w:t` runs everything else uses, so any tool that
+reads a DOCX by walking `w:t` — the common approach, and what a lot of
+applicant tracking systems do — gets the line back with a hole in it:
+
+```
+Cut median latency by reducing the sort to  .
+```
+
+The formatting you gain is small, and the text you lose is the quantified part
+a screener came for. Write `O(n log n)` as plain text instead. Real math is
+worth it only in a document a human will read whole, never in a bullet you need
+parsed.
+
+Two related notes:
+
+- **Raw LaTeX commands are dropped in silence.** `\textbf{...}`, `\LaTeX{}` and
+  environments parse as raw TeX, which the DOCX writer discards without a
+  warning. Only the math delimiters survive the trip.
+- **Dollar amounts are safe.** Pandoc opens math only on a `$` with no space
+  after it, and closes only on a `$` with no space before it and no digit after
+  it, so `$50k-$100k`, `$1.2M/$3.4M`, `$1M to $5M` and `$75,000` all come
+  through as written. The one shape that misfires is a letter-led pair like
+  `$USD-$CAD`, which parses as math; escape it as `\$USD-\$CAD`.
+
 ## Tailoring for a specific application
 
 Copy the file and cut:
