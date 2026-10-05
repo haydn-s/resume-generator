@@ -171,8 +171,7 @@ changes, so a preset is usually two or three lines:
 
 ```ini
 [DEFAULT]
-body_font    = Calibri
-display_font = Arial
+font         = Calibri # one family for every style
 body_size    = 21       # half-points, so 21 = 10.5pt
 page_width   = 12240    # US Letter
 page_height  = 15840
