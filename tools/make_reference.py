@@ -291,8 +291,7 @@ def design(cfg, env=None):
     # Every value here comes from presets.ini -- see that file for what each one
     # means and how to add a preset of your own.
 
-    BODY_FONT = knob("body_font")
-    DISPLAY_FONT = knob("display_font")   # name, tagline, contact, headings
+    FONT = knob("font")   # one family for every style, so nothing can mismatch
     BODY_SIZE = knob("body_size", int)
     PAGE_W = knob("page_width", int)
     PAGE_H = knob("page_height", int)
@@ -334,7 +333,7 @@ def design(cfg, env=None):
         "Normal": (
             "Normal",
             f'{TABS}<w:spacing w:before="0" w:after="0" w:line="{LINE}" w:lineRule="auto"/>',
-            f'{rfonts(BODY_FONT)}<w:sz w:val="{BODY_SIZE}"/><w:szCs w:val="{BODY_SIZE}"/>',
+            f'{rfonts(FONT)}<w:sz w:val="{BODY_SIZE}"/><w:szCs w:val="{BODY_SIZE}"/>',
         ),
         # First paragraph after a heading: no extra space, the heading supplies it.
         "FirstParagraph": (
@@ -366,7 +365,7 @@ def design(cfg, env=None):
              '<w:pBdr><w:bottom w:val="single" w:sz="6" w:space="3" w:color="000000"/></w:pBdr>'
              f'<w:spacing w:before="{sp(220)}" w:after="{sp(80)}"/>'
              '<w:outlineLvl w:val="0"/>'),
-            (f'{rfonts(DISPLAY_FONT)}<w:b/><w:bCs/><w:caps/>'
+            (f'{rfonts(FONT)}<w:b/><w:bCs/><w:caps/>'
              f'<w:color w:val="000000"/><w:spacing w:val="40"/>'
              f'<w:sz w:val="21"/><w:szCs w:val="21"/>'),
         ),
@@ -379,26 +378,26 @@ def design(cfg, env=None):
              f'{TABS}'
              f'<w:spacing w:before="{sp(140)}" w:after="{sp(40)}"/>'
              '<w:outlineLvl w:val="1"/>'),
-            (f'{rfonts(DISPLAY_FONT)}<w:b/><w:bCs/>'
+            (f'{rfonts(FONT)}<w:b/><w:bCs/>'
              f'<w:color w:val="000000"/>'
              f'<w:sz w:val="22"/><w:szCs w:val="22"/>'),
         ),
         "Name": (
             "Name",
             f'<w:spacing w:before="0" w:after="{sp(40)}"/>',
-            (f'{rfonts(DISPLAY_FONT)}<w:b/><w:bCs/><w:spacing w:val="10"/>'
+            (f'{rfonts(FONT)}<w:b/><w:bCs/><w:spacing w:val="10"/>'
              f'<w:sz w:val="40"/><w:szCs w:val="40"/>'),
         ),
         "Tagline": (
             "Tagline",
             f'<w:spacing w:before="0" w:after="{sp(40)}"/>',
-            (f'{rfonts(DISPLAY_FONT)}<w:caps/><w:color w:val="555555"/>'
+            (f'{rfonts(FONT)}<w:caps/><w:color w:val="555555"/>'
              f'<w:spacing w:val="30"/><w:sz w:val="21"/><w:szCs w:val="21"/>'),
         ),
         "Contact": (
             "Contact",
             '<w:spacing w:before="0" w:after="0"/>',
-            f'{rfonts(DISPLAY_FONT)}<w:sz w:val="19"/><w:szCs w:val="19"/>',
+            f'{rfonts(FONT)}<w:sz w:val="19"/><w:szCs w:val="19"/>',
         ),
     }
 
@@ -413,7 +412,7 @@ def design(cfg, env=None):
     return {
         "styles": STYLES,
         "sect_pr": SECT_PR,
-        "body_font": BODY_FONT,
+        "font": FONT,
         "body_size": BODY_SIZE,
     }
 # --------------------------------------------------------------------- build
@@ -424,7 +423,7 @@ def main(argv=None):
     cfg = load_preset(preset)
     d = design(cfg)
     styles, sect_pr = d["styles"], d["sect_pr"]
-    body_font, body_size = d["body_font"], d["body_size"]
+    font, body_size = d["font"], d["body_size"]
 
     if out_name is None:
         out_name = ("reference.docx" if preset == "DEFAULT"
@@ -474,12 +473,24 @@ def main(argv=None):
     s = re.sub(
         r'<w:docDefaults>.*?</w:docDefaults>',
         '<w:docDefaults><w:rPrDefault><w:rPr>'
-        + rfonts(body_font)
+        + rfonts(font)
         + f'<w:sz w:val="{body_size}"/><w:szCs w:val="{body_size}"/>'
         + '</w:rPr></w:rPrDefault><w:pPrDefault><w:pPr/></w:pPrDefault></w:docDefaults>',
         s, flags=re.DOTALL)
 
+    # Pandoc's own character styles (Title, Heading1Char, VerbatimChar, ...) carry
+    # theme fonts or Consolas that no paragraph style above reaches. Pin every
+    # font declaration in the file to the one family.
+    s = re.sub(r'<w:rFonts\b[^>]*/>', rfonts(font), s)
     spath.write_text(s, encoding="utf-8")
+
+    # Theme fonts (Aptos) are what any stray run would fall back to; point
+    # them at the same family.
+    tpath = unpacked / "word" / "theme" / "theme1.xml"
+    if tpath.exists():
+        t = tpath.read_text(encoding="utf-8")
+        t = re.sub(r'<a:latin typeface="[^"]*"', f'<a:latin typeface="{font}"', t)
+        tpath.write_text(t, encoding="utf-8")
 
     # ---- numbering.xml: real bullet glyph, tighter indent ----
     # Pandoc regenerates list numbering, so this only takes effect for
