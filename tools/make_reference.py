@@ -12,15 +12,15 @@ Edit the constants below to change the look of every resume you generate.
 import configparser
 import os
 import re
-import shutil
 import subprocess
 import sys
+import tempfile
+import uuid
 import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 BUILD = ROOT / "build"
-WORK = BUILD / "_refbuild"
 CONFIG = ROOT / "presets.ini"
 
 USAGE = "usage: make_reference.py [options] [output.docx]"
@@ -419,31 +419,22 @@ def design(cfg, env=None):
 # --------------------------------------------------------------------- build
 
 
-def main(argv=None):
-    preset, out_name = parse_args(sys.argv[1:] if argv is None else argv)
-    cfg = load_preset(preset)
-    d = design(cfg)
+def write_reference(d, out, work):
+    """Restyle Pandoc's default reference.docx with design `d` and write `out`.
+
+    `work` is scratch space this call owns outright. It used to be one shared
+    build/_refbuild, and two builds at once would delete each other's files
+    or, worse, zip the other preset's styles under their own name and exit 0.
+    """
     styles, sect_pr = d["styles"], d["sect_pr"]
     body_font, body_size = d["body_font"], d["body_size"]
 
-    if out_name is None:
-        out_name = ("reference.docx" if preset == "DEFAULT"
-                    else f"reference-{preset}.docx")
-        out = BUILD / out_name
-    else:
-        out = Path(out_name)          # explicit paths are relative to the cwd
-    out.parent.mkdir(parents=True, exist_ok=True)
-
-    if WORK.exists():
-        shutil.rmtree(WORK)
-    WORK.mkdir(parents=True)
-
-    base = WORK / "base.docx"
+    base = work / "base.docx"
     with open(base, "wb") as fh:
         subprocess.run(["pandoc", "--print-default-data-file", "reference.docx"],
                        stdout=fh, check=True)
 
-    unpacked = WORK / "unpacked"
+    unpacked = work / "unpacked"
     with zipfile.ZipFile(base) as z:
         z.extractall(unpacked)
 
@@ -517,14 +508,36 @@ def main(argv=None):
     dpath.write_text(d, encoding="utf-8")
 
     # ---- repack ----
-    if out.exists():
-        out.unlink()
-    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
-        for f in sorted(unpacked.rglob("*")):
-            if f.is_file():
-                z.write(f, f.relative_to(unpacked))
+    # Into a uniquely named file beside the target, then renamed over it, so a
+    # build reading the carrier sees the old file or the new one and never half
+    # of either. os.replace() is only atomic within one filesystem, which is
+    # why the partial file sits next to `out` rather than in `work`.
+    tmp = out.with_name(f".{out.name}.{uuid.uuid4().hex}.tmp")
+    try:
+        with zipfile.ZipFile(tmp, "x", zipfile.ZIP_DEFLATED) as z:
+            for f in sorted(unpacked.rglob("*")):
+                if f.is_file():
+                    z.write(f, f.relative_to(unpacked))
+        os.replace(tmp, out)
+    finally:
+        tmp.unlink(missing_ok=True)
 
-    shutil.rmtree(WORK)
+
+def main(argv=None):
+    preset, out_name = parse_args(sys.argv[1:] if argv is None else argv)
+    cfg = load_preset(preset)
+    d = design(cfg)
+
+    if out_name is None:
+        out_name = ("reference.docx" if preset == "DEFAULT"
+                    else f"reference-{preset}.docx")
+        out = BUILD / out_name
+    else:
+        out = Path(out_name)          # explicit paths are relative to the cwd
+    out.parent.mkdir(parents=True, exist_ok=True)
+
+    with tempfile.TemporaryDirectory(prefix="refbuild-") as work:
+        write_reference(d, out, Path(work))
     print(f"wrote {out} [preset: {preset}]")
 
 
