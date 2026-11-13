@@ -69,13 +69,20 @@ jobs:
 
   python:
     name: Python ${{ matrix.python }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         # 3.9 is what stock macOS ships and the reason presets are INI rather
         # than TOML. If this job goes red, that decision has been undone.
-        python: ['3.9', '3.13']
+        #
+        # 3.9 is past end of life, and actions/python-versions publishes no
+        # build of it for Ubuntu 26.04, which ubuntu-latest became. 24.04 is
+        # the newest image that still has one. When GitHub retires 24.04 the
+        # floor needs another source, not a quiet bump to a newer Python.
+        include:
+          - { python: '3.9', os: ubuntu-24.04 }
+          - { python: '3.13', os: ubuntu-latest }
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
