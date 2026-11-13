@@ -191,6 +191,34 @@ print('DEFAULT ' + ' '.join(c.sections()))")
       fail "preset made no difference to the output" "DEFAULT=$a clean=$b"
     fi
 
+    # Carriers built at once must not share scratch space or half-write each
+    # other's output. When they did, a build could exit 0 having zipped the
+    # other preset's styles under its own name: a resume that builds, looks
+    # plausible and is wrong. Two presets race here, plus a second writer to
+    # the same carrier, as two ./build.sh runs on one stale preset would be.
+    sb python3 tools/make_reference.py --preset roomy build/seq-roomy.docx >/dev/null 2>&1
+    sb python3 tools/make_reference.py --preset compact build/seq-compact.docx >/dev/null 2>&1
+    want_roomy=$(python3 tests/lib/docx.py part "$SANDBOX/build/seq-roomy.docx" styles.xml)
+    want_compact=$(python3 tests/lib/docx.py part "$SANDBOX/build/seq-compact.docx" styles.xml)
+    race=""
+    [ -n "$want_roomy" ] && [ -n "$want_compact" ] || race=" sequential-baseline-failed"
+    for i in 1 2 3 4 5 6 7 8; do
+      sb python3 tools/make_reference.py --preset roomy build/par-roomy.docx >/dev/null 2>&1 & p1=$!
+      sb python3 tools/make_reference.py --preset compact build/par-compact.docx >/dev/null 2>&1 & p2=$!
+      sb python3 tools/make_reference.py --preset roomy build/par-roomy.docx >/dev/null 2>&1 & p3=$!
+      wait "$p1" || race="$race run$i:roomy-crashed"
+      wait "$p2" || race="$race run$i:compact-crashed"
+      wait "$p3" || race="$race run$i:roomy-again-crashed"
+      got=$(python3 tests/lib/docx.py part "$SANDBOX/build/par-roomy.docx" styles.xml 2>/dev/null)
+      [ "$got" = "$want_roomy" ] || race="$race run$i:roomy-wrong"
+      got=$(python3 tests/lib/docx.py part "$SANDBOX/build/par-compact.docx" styles.xml 2>/dev/null)
+      [ "$got" = "$want_compact" ] || race="$race run$i:compact-wrong"
+    done
+    stray=$(cd "$SANDBOX/build" && find . -name '*.tmp' | tr '\n' ' ')
+    [ -z "$stray" ] || race="$race leftover:$stray"
+    if [ -z "$race" ]; then pass "parallel carrier builds stay correct (8 rounds of 3)"
+    else fail "parallel carrier builds collided:" "$race"; fi
+
     # --set writes to presets.ini, so it runs last: the sandbox copy is edited,
     # never the real file. Comments are the thing at risk -- configparser.write()
     # would drop every one of them.

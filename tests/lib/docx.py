@@ -3,7 +3,7 @@ import re
 import sys
 import zipfile
 
-USAGE = "usage: docx.py {styles|tabs|literal-at|math|text|style-attr} FILE [args]"
+USAGE = "usage: docx.py {styles|tabs|literal-at|math|text|style-attr|part} FILE [args]"
 
 
 def read(path, part):
@@ -38,6 +38,9 @@ def main(argv):
             sys.exit("no such style: " + sid)
         m = re.search(rf'{re.escape(attr)}="([^"]+)"', blk.group(0))
         print(m.group(1) if m else "")
+    elif cmd == "part":
+        # One XML part verbatim, e.g. styles.xml, for comparing two documents.
+        print(read(path, argv[2]))
     else:
         sys.exit(USAGE)
 
